@@ -1,5 +1,22 @@
 // src/logic/princessify.ts
 
+// ========================================
+// 入力揺らぎ対応の文字マッピング
+// 新しい文字を追加する場合はここに追記
+// ========================================
+
+// ON状態として認識する文字（丸っぽい表現）
+const ON_CHARS = 'Oo0〇◯⭕';
+
+// OFF状態として認識する文字（バツや横棒的な表現）
+const OFF_CHARS = 'Xxー❌✕✖×-‐−–—';
+
+// 開き括弧として認識する文字
+const OPEN_BRACKETS = '[［【(（{｛<＜〈《「『〔';
+
+// 閉じ括弧として認識する文字
+const CLOSE_BRACKETS = ']］】)）}｝>＞〉》」』〕';
+
 interface TimelineEntry {
     lineIndex: number;      // 元の行番号
     originalText: string;   // 元の行テキスト
@@ -13,11 +30,24 @@ interface TimelineEntry {
 // 5つのスロットの状態（true=SET, false=UNSET）
 type DangoState = boolean[];
 
+// エスケープが必要な正規表現の特殊文字をエスケープ
+function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+}
+
+// お団子を見つける正規表現を動的に生成
+function buildDangoRegex(): RegExp {
+    const openBrackets = escapeRegex(OPEN_BRACKETS);
+    const closeBrackets = escapeRegex(CLOSE_BRACKETS);
+    const dangoChars = escapeRegex(ON_CHARS + OFF_CHARS);
+    return new RegExp(`[${openBrackets}]([${dangoChars}\\s]+)[${closeBrackets}]`);
+}
+
 export class Princessify {
     private party: string[] = [];
 
-    // 既存のお団子を見つける正規表現（半角・全角ブラケット対応）
-    private readonly dangoRegex = /[\[［]([O0OXx〇◯ー⭕❌\s]+)[\]］]/;
+    // 既存のお団子を見つける正規表現（動的に生成）
+    private readonly dangoRegex = buildDangoRegex();
 
     public convert(inputText: string): string {
         const lines = inputText.split('\n');
@@ -55,12 +85,12 @@ export class Princessify {
     private parseDangoState(dangoContent: string): boolean[] {
         const state: boolean[] = [];
         for (const char of dangoContent) {
-            // ON状態: O, 0, 〇, ◯, ⭕
-            if ('Oo0〇◯⭕'.includes(char)) {
+            // ON状態
+            if (ON_CHARS.includes(char)) {
                 state.push(true);
             }
-            // OFF状態: X, x, ー, ❌
-            else if ('Xxー❌'.includes(char)) {
+            // OFF状態
+            else if (OFF_CHARS.includes(char)) {
                 state.push(false);
             }
             // スペースは無視
