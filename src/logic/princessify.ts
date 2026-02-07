@@ -9,7 +9,8 @@
 const ON_CHARS = 'Oo0〇◯⭕';
 
 // OFF状態として認識する文字（バツや横棒的な表現）
-const OFF_CHARS = 'Xxー❌✕✖×-‐−–—';
+// ー(U+30FC):長音, －(U+FF0D):全角ハイフンマイナス, -(U+002D):半角ハイフン, 等
+const OFF_CHARS = 'Xxー－❌✕✖×-‐−–—';
 
 // 開き括弧として認識する文字
 const OPEN_BRACKETS = '[［【(（{｛<＜〈《「『〔';

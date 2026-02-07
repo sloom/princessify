@@ -246,4 +246,27 @@ assertIncludes(result7, '1:30 開始 [ー〇ーー〇]', '括弧なし大文字�
 // xOxXo → OoOxX: [ー〇ーー〇] → [〇〇〇ーー]
 assertIncludes(result7, '1:20 A [⭕〇⭕ー❌]', '括弧なし大文字小文字混在（差分）');
 
+console.log('\n=== 全角ハイフンマイナステスト ===\n');
+
+const tool8 = new Princessify();
+
+// 全角ハイフンマイナス（U+FF0D）を使用
+const input8 = `
+@party キョウカ スズメ エリス シズル ボス
+
+1:30　バトル開始　[〇〇〇〇〇]
+1:01　キョウカ　　[〇－－〇〇]
+`;
+
+const result8 = tool8.convert(input8);
+console.log('--- 変換結果（全角ハイフンマイナス） ---');
+console.log(result8);
+console.log('--- テスト ---');
+
+// 1:30 初期状態
+assertIncludes(result8, '1:30　バトル開始　[〇〇〇〇〇]', '初期状態が維持される');
+
+// 1:01 キョウカ: [〇〇〇〇〇] → [〇－－〇〇] (index 1,2: ON→OFF = ❌)
+assertIncludes(result8, '1:01　キョウカ　　[〇❌❌〇〇]', '全角ハイフンマイナス（－）がOFFとして認識される');
+
 console.log('\n=== テスト完了 ===\n');
