@@ -29,8 +29,8 @@ client.on(Events.MessageCreate, async message => {
     if (message.author.bot) return;
 
     // TL変換のトリガーとなる条件
-    // ここでは「@party」が含まれているメッセージ全てに反応するようにします
-    if (message.content.includes('@party')) {
+    // 「@dango」が含まれているメッセージに反応
+    if (message.content.includes('@dango')) {
         try {
             console.log(`📩 メッセージを受信: ${message.author.username}`);
 

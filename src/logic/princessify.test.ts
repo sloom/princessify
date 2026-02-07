@@ -53,7 +53,7 @@ const tool = new Princessify();
 // ユーザーが既存のお団子で状態を指定している入力
 // ◯→ーになった場合は❌を出力すべき
 const input = `
-@party A B C D E
+@dango A B C D E
 
 1:30 開始 [◯ー◯◯ー]
 1:20 C [◯ー◯ーー]
@@ -82,7 +82,7 @@ const tool2 = new Princessify();
 
 // ー→◯になった場合は⭕を出力すべき
 const input2 = `
-@party A B C D E
+@dango A B C D E
 
 1:30 開始 [ーーーーー]
 1:20 A [◯ーーーー]
@@ -106,7 +106,7 @@ const tool3 = new Princessify();
 
 // OFF状態の揺らぎ: x, X, ✕, -, ‐ などを認識
 const input3 = `
-@party A B C D E
+@dango A B C D E
 
 1:30 開始 [OxX✕-]
 1:20 A [O-X✕x]
@@ -129,7 +129,7 @@ const tool4 = new Princessify();
 
 // 括弧の揺らぎ: 【】 → [] に統一
 const input4 = `
-@party A B C D E
+@dango A B C D E
 
 1:30 開始 【〇ーーーー】
 1:20 A 【〇〇ーーー】
@@ -150,7 +150,7 @@ const tool5 = new Princessify();
 
 // 複合ケース: 様々な揺らぎが混在
 const input5 = `
-@party A B C D E
+@dango A B C D E
 
 1:30 開始 【Ox0-‐】
 1:20 A ［O〇oXx］
@@ -188,7 +188,7 @@ const bracketTests = [
 for (const test of bracketTests) {
     const tool = new Princessify();
     const input = `
-@party A B C D E
+@dango A B C D E
 
 1:30 開始 ${test.input}
 `;
@@ -202,7 +202,7 @@ const tool6 = new Princessify();
 
 // 括弧なしのお団子表記（XOXXX, OXOXX など）
 const input6 = `
-@party ユニ エリコ ペコ ルカ シズル
+@dango ユニ エリコ ペコ ルカ シズル
 
 1:30 開始 XOXXX オートOFF
 1:06 ペコ OXOXX オートOFF
@@ -229,7 +229,7 @@ const tool7 = new Princessify();
 
 // 大文字小文字混在
 const input7 = `
-@party A B C D E
+@dango A B C D E
 
 1:30 開始 xOxXo
 1:20 A OoOxX
@@ -252,7 +252,7 @@ const tool8 = new Princessify();
 
 // 全角ハイフンマイナス（U+FF0D）を使用
 const input8 = `
-@party キョウカ スズメ エリス シズル ボス
+@dango キョウカ スズメ エリス シズル ボス
 
 1:30　バトル開始　[〇〇〇〇〇]
 1:01　キョウカ　　[〇－－〇〇]
@@ -269,11 +269,11 @@ assertIncludes(result8, '1:30　バトル開始　[〇〇〇〇〇]', '初期状
 // 1:01 キョウカ: [〇〇〇〇〇] → [〇－－〇〇] (index 1,2: ON→OFF = ❌)
 assertIncludes(result8, '1:01　キョウカ　　[〇❌❌〇〇]', '全角ハイフンマイナス（－）がOFFとして認識される');
 
-console.log('\n=== @party省略テスト ===\n');
+console.log('\n=== @dango省略テスト ===\n');
 
 const tool9 = new Princessify();
 
-// @partyなしで、行頭付近に時間がある行を処理
+// @dangoなしで、行頭付近に時間がある行を処理
 const input9 = `
 1:30 開始 [〇〇〇〇〇]
 1:20 アクション [〇〇ーーー]
@@ -281,15 +281,15 @@ const input9 = `
 `;
 
 const result9 = tool9.convert(input9);
-console.log('--- 変換結果（@party省略） ---');
+console.log('--- 変換結果（@dango省略） ---');
 console.log(result9);
 console.log('--- テスト ---');
 
-// @partyなしでも処理される
-assertIncludes(result9, '1:30 開始 [〇〇〇〇〇]', '@partyなしでも初期状態が処理される');
+// @dangoなしでも処理される
+assertIncludes(result9, '1:30 開始 [〇〇〇〇〇]', '@dangoなしでも初期状態が処理される');
 // [〇〇〇〇〇] → [〇〇ーーー]: index 2,3,4 が ON→OFF = ❌
-assertIncludes(result9, '1:20 アクション [〇〇❌❌❌]', '@partyなしでも差分計算される');
-assertIncludes(result9, '1:10 終了 [❌❌ーーー]', '@partyなしでも差分計算される（2）');
+assertIncludes(result9, '1:20 アクション [〇〇❌❌❌]', '@dangoなしでも差分計算される');
+assertIncludes(result9, '1:10 終了 [❌❌ーーー]', '@dangoなしでも差分計算される（2）');
 
 console.log('\n=== 行頭10文字以内テスト ===\n');
 
@@ -313,5 +313,45 @@ assertIncludes(result10, '　　1:20 アクション [〇❌❌❌❌]', '全角
 
 // 行頭から離れた時間は処理されない（お団子が追加されない）
 assertNotIncludes(result10, 'これはコメントですよ 1:10 時間が遠いので処理対象外 [', '行頭から離れた時間は処理されない');
+
+console.log('\n=== @dangoトリガーテスト ===\n');
+
+const tool11 = new Princessify();
+
+// @dangoでトリガー、キャラ名指定なし
+const input11 = `
+@dango
+
+1:30 開始 [〇〇〇〇〇]
+1:20 アクション [〇〇ーーー]
+`;
+
+const result11 = tool11.convert(input11);
+console.log('--- 変換結果（@dango） ---');
+console.log(result11);
+console.log('--- テスト ---');
+
+assertIncludes(result11, '1:30 開始 [〇〇〇〇〇]', '@dangoで処理される');
+assertIncludes(result11, '1:20 アクション [〇〇❌❌❌]', '@dangoで差分計算される');
+
+console.log('\n=== @dango + キャラ名指定テスト ===\n');
+
+const tool12 = new Princessify();
+
+// @dangoでキャラ名も指定可能
+const input12 = `
+@dango A B C D E
+
+1:30 開始 [〇〇〇〇〇]
+1:20 A アクション
+`;
+
+const result12 = tool12.convert(input12);
+console.log('--- 変換結果（@dango + キャラ名） ---');
+console.log(result12);
+console.log('--- テスト ---');
+
+// キャラ名Aがある行も処理される（お団子なしでも）
+assertIncludes(result12, '1:20 A アクション [〇〇〇〇〇]', '@dango + キャラ名指定で動作');
 
 console.log('\n=== テスト完了 ===\n');

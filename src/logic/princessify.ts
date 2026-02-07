@@ -76,7 +76,7 @@ export class Princessify {
     private parseHeader(lines: string[]) {
         for (const line of lines) {
             const trimmed = line.trim();
-            if (trimmed.startsWith('@party')) {
+            if (trimmed.startsWith('@dango')) {
                 const parts = trimmed.substring(6).trim().split(/\s+/);
                 if (parts.length === 5) {
                     this.party = parts;
