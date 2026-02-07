@@ -63,14 +63,10 @@ export class Princessify {
     public convert(inputText: string): string {
         const lines = inputText.split('\n');
 
-        // 1. ヘッダー解析
+        // 1. ヘッダー解析（@partyは省略可能）
         this.parseHeader(lines);
 
-        if (this.party.length !== 5) {
-            return "❌ エラー: 先頭行に '@party キャラ1 ...' を指定してください。";
-        }
-
-        // 2. タイムライン解析（お団子がある行はキャラ名がなくても対象）
+        // 2. タイムライン解析
         const entries = this.parseTimeline(lines);
 
         // 3. 推論と整形
@@ -122,12 +118,16 @@ export class Princessify {
             const trimmed = line.trim();
             const timeMatch = trimmed.match(timeRegex);
 
-            // 時間がある行のみ処理
+            // 時間がない行はスキップ
             if (!timeMatch) continue;
 
             const timeStr = timeMatch[1];
 
-            // キャラ名を探す
+            // 行頭から10文字以内に時間があるかチェック
+            const timePosition = trimmed.indexOf(timeStr);
+            const hasTimeNearStart = timePosition >= 0 && timePosition <= 10;
+
+            // キャラ名を探す（@partyが指定されている場合のみ）
             let actorIndex = -1;
             let actorName = "";
             for (let i = 0; i < this.party.length; i++) {
@@ -157,8 +157,8 @@ export class Princessify {
                 }
             }
 
-            // キャラ名があるか、お団子があれば対象に含める
-            if (actorIndex !== -1 || hasUserDango) {
+            // 処理対象の条件: 行頭付近に時間がある OR お団子がある OR キャラ名がある
+            if (hasTimeNearStart || hasUserDango || actorIndex !== -1) {
                 entries.push({
                     lineIndex,
                     originalText: line,

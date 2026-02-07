@@ -269,4 +269,49 @@ assertIncludes(result8, '1:30　バトル開始　[〇〇〇〇〇]', '初期状
 // 1:01 キョウカ: [〇〇〇〇〇] → [〇－－〇〇] (index 1,2: ON→OFF = ❌)
 assertIncludes(result8, '1:01　キョウカ　　[〇❌❌〇〇]', '全角ハイフンマイナス（－）がOFFとして認識される');
 
+console.log('\n=== @party省略テスト ===\n');
+
+const tool9 = new Princessify();
+
+// @partyなしで、行頭付近に時間がある行を処理
+const input9 = `
+1:30 開始 [〇〇〇〇〇]
+1:20 アクション [〇〇ーーー]
+1:10 終了 [ーーーーー]
+`;
+
+const result9 = tool9.convert(input9);
+console.log('--- 変換結果（@party省略） ---');
+console.log(result9);
+console.log('--- テスト ---');
+
+// @partyなしでも処理される
+assertIncludes(result9, '1:30 開始 [〇〇〇〇〇]', '@partyなしでも初期状態が処理される');
+// [〇〇〇〇〇] → [〇〇ーーー]: index 2,3,4 が ON→OFF = ❌
+assertIncludes(result9, '1:20 アクション [〇〇❌❌❌]', '@partyなしでも差分計算される');
+assertIncludes(result9, '1:10 終了 [❌❌ーーー]', '@partyなしでも差分計算される（2）');
+
+console.log('\n=== 行頭10文字以内テスト ===\n');
+
+const tool10 = new Princessify();
+
+// 行頭から10文字以内に時間がある場合のみ処理
+const input10 = `
+⭐️1:30 開始 [〇〇〇〇〇]
+　　1:20 アクション [〇ーーーー]
+これはコメントですよ 1:10 時間が遠いので処理対象外
+`;
+
+const result10 = tool10.convert(input10);
+console.log('--- 変換結果（行頭10文字以内） ---');
+console.log(result10);
+console.log('--- テスト ---');
+
+// 行頭付近に時間がある行は処理
+assertIncludes(result10, '⭐️1:30 開始 [〇〇〇〇〇]', '行頭付近の時間は処理される');
+assertIncludes(result10, '　　1:20 アクション [〇❌❌❌❌]', '全角空白後の時間も処理される');
+
+// 行頭から離れた時間は処理されない（お団子が追加されない）
+assertNotIncludes(result10, 'これはコメントですよ 1:10 時間が遠いので処理対象外 [', '行頭から離れた時間は処理されない');
+
 console.log('\n=== テスト完了 ===\n');
