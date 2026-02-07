@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    /* 基本設定 */
+    "target": "es2022",                                  /* 最新のNode.jsに合わせて新しめのJSを出力 */
+    "module": "commonjs",                                /* ts-nodeで動かしやすい形式に変換 */
+    "moduleResolution": "node",                          /* Node.jsの作法でファイルを解決 */
+    "esModuleInterop": true,                             /* CommonJSとESMの互換性を確保 */
+    "forceConsistentCasingInFileNames": true,            /* ファイル名の大文字小文字を厳格に */
+    "strict": true,                                      /* 型チェックを厳しくする（推奨） */
+    "skipLibCheck": true,                                /* ライブラリの型定義エラーを無視 */
+    
+    /* 今回のエラーの直接の原因 */
+    "verbatimModuleSyntax": false,                       /* importをrequireに自動変換することを許可 */
+    
+    /* 出力先の設定（将来的に使う） */
+    "outDir": "./dist",
+    "rootDir": "./"
+  },
+  "include": ["src/**/*", "test.ts"],
+  "exclude": ["node_modules"]
+}
