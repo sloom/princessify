@@ -35,19 +35,29 @@ function escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
 }
 
-// お団子を見つける正規表現を動的に生成
-function buildDangoRegex(): RegExp {
+// 括弧付きお団子を見つける正規表現を動的に生成
+function buildBracketedDangoRegex(): RegExp {
     const openBrackets = escapeRegex(OPEN_BRACKETS);
     const closeBrackets = escapeRegex(CLOSE_BRACKETS);
     const dangoChars = escapeRegex(ON_CHARS + OFF_CHARS);
     return new RegExp(`[${openBrackets}]([${dangoChars}\\s]+)[${closeBrackets}]`);
 }
 
+// 括弧なしお団子を見つける正規表現を動的に生成（5文字ちょうど）
+function buildNoBracketDangoRegex(): RegExp {
+    const dangoChars = escapeRegex(ON_CHARS + OFF_CHARS);
+    // 空白の後に5文字のお団子文字、その後に空白または行末
+    return new RegExp(`(?<=\\s)([${dangoChars}]{5})(?=\\s|$)`);
+}
+
 export class Princessify {
     private party: string[] = [];
 
-    // 既存のお団子を見つける正規表現（動的に生成）
-    private readonly dangoRegex = buildDangoRegex();
+    // 括弧付きお団子を見つける正規表現
+    private readonly bracketedDangoRegex = buildBracketedDangoRegex();
+
+    // 括弧なしお団子を見つける正規表現（5文字ちょうど）
+    private readonly noBracketDangoRegex = buildNoBracketDangoRegex();
 
     public convert(inputText: string): string {
         const lines = inputText.split('\n');
@@ -127,14 +137,23 @@ export class Princessify {
                 }
             }
 
-            // 既存のお団子を探す
-            const dangoMatch = trimmed.match(this.dangoRegex);
+            // 既存のお団子を探す（括弧付き優先、なければ括弧なし）
+            let dangoMatch = trimmed.match(this.bracketedDangoRegex);
             let userState: boolean[] = [false, false, false, false, false];
             let hasUserDango = false;
+            let hasBracketedDango = false;
 
             if (dangoMatch) {
                 userState = this.parseDangoState(dangoMatch[1]);
                 hasUserDango = true;
+                hasBracketedDango = true;
+            } else {
+                // 括弧なしお団子を探す
+                const noBracketMatch = trimmed.match(this.noBracketDangoRegex);
+                if (noBracketMatch) {
+                    userState = this.parseDangoState(noBracketMatch[1]);
+                    hasUserDango = true;
+                }
             }
 
             // キャラ名があるか、お団子があれば対象に含める
@@ -187,9 +206,12 @@ export class Princessify {
             // 元のテキストへの埋め込み
             let newText = currentEntry.originalText;
 
-            if (this.dangoRegex.test(newText)) {
-                // 既存のお団子がある場合 -> 置換する
-                newText = newText.replace(this.dangoRegex, dangoStr);
+            if (this.bracketedDangoRegex.test(newText)) {
+                // 括弧付きお団子がある場合 -> 置換する
+                newText = newText.replace(this.bracketedDangoRegex, dangoStr);
+            } else if (this.noBracketDangoRegex.test(newText)) {
+                // 括弧なしお団子がある場合 -> 置換する
+                newText = newText.replace(this.noBracketDangoRegex, dangoStr);
             } else {
                 // ない場合 -> 行末に追加
                 newText = `${newText} ${dangoStr}`;

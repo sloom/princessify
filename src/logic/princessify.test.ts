@@ -196,4 +196,54 @@ for (const test of bracketTests) {
     assertIncludes(result, '1:30 開始 [〇ーーーー]', `${test.name} が [] に統一される`);
 }
 
+console.log('\n=== 括弧なしお団子テスト ===\n');
+
+const tool6 = new Princessify();
+
+// 括弧なしのお団子表記（XOXXX, OXOXX など）
+const input6 = `
+@party ユニ エリコ ペコ ルカ シズル
+
+1:30 開始 XOXXX オートOFF
+1:06 ペコ OXOXX オートOFF
+1:01 ペコ OXOOX オートON
+`;
+
+const result6 = tool6.convert(input6);
+console.log('--- 変換結果（括弧なし） ---');
+console.log(result6);
+console.log('--- テスト ---');
+
+// 1:30 初期状態: XOXXX → [ー〇ーーー]
+assertIncludes(result6, '1:30 開始 [ー〇ーーー] オートOFF', '括弧なしお団子が認識される（初期行）');
+
+// 1:06 ペコ: XOXXX → OXOXX (index 0: OFF→ON, index 1: ON→OFF, index 2: OFF→ON)
+assertIncludes(result6, '1:06 ペコ [⭕❌⭕ーー] オートOFF', '括弧なしお団子の差分計算');
+
+// 1:01 ペコ: OXOXX → OXOOX (index 3: OFF→ON)
+assertIncludes(result6, '1:01 ペコ [〇ー〇⭕ー] オートON', '括弧なしお団子の差分計算（2）');
+
+console.log('\n=== 括弧なし複合テスト ===\n');
+
+const tool7 = new Princessify();
+
+// 大文字小文字混在
+const input7 = `
+@party A B C D E
+
+1:30 開始 xOxXo
+1:20 A OoOxX
+`;
+
+const result7 = tool7.convert(input7);
+console.log('--- 変換結果（大文字小文字混在） ---');
+console.log(result7);
+console.log('--- テスト ---');
+
+// xOxXo → [ー〇ー ー〇]
+assertIncludes(result7, '1:30 開始 [ー〇ーー〇]', '括弧なし大文字小文字混在（初期行）');
+
+// xOxXo → OoOxX: [ー〇ーー〇] → [〇〇〇ーー]
+assertIncludes(result7, '1:20 A [⭕〇⭕ー❌]', '括弧なし大文字小文字混在（差分）');
+
 console.log('\n=== テスト完了 ===\n');
