@@ -47,6 +47,42 @@ export function renderAutoState(prev: boolean, current: boolean): string {
     return '⬛';                             // OFF維持
 }
 
+// ========================================
+// 推論モード: UBタイプ分類
+// ========================================
+
+export type UBType = 'manual' | 'set' | 'auto' | 'enemy';
+
+export function classifyUBType(
+    textAfterCharName: string,
+    fullLineText: string
+): UBType {
+    if (/^\d{1,2}:\d{2}[\s　]+敵UB/.test(fullLineText.trim())) return 'enemy';
+    const firstToken = textAfterCharName.trim().split(/[\s　]+/)[0] || '';
+    if (firstToken.startsWith('#')) return 'set';
+    if (firstToken.toUpperCase() === 'AUTO') return 'auto';
+    return 'manual';
+}
+
+// ========================================
+// 推論モード: 明示的SET検出
+// ========================================
+
+export function parseExplicitSets(
+    text: string,
+    party: string[]
+): number[] {
+    const results: number[] = [];
+    const regex = /ここで(\S+?)(?:set|SET|セット)/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        const charName = match[1];
+        const idx = party.indexOf(charName);
+        if (idx !== -1) results.push(idx);
+    }
+    return results;
+}
+
 interface TimelineEntry {
     lineIndex: number;      // 元の行番号
     originalText: string;   // 元の行テキスト
@@ -104,7 +140,19 @@ export class Princessify {
         // 2. タイムライン解析
         const entries = this.parseTimeline(lines);
 
-        // 3. 推論と整形
+        // 3. モード判別
+        const hasAnyUserDango = entries.some(e => e.hasUserDango);
+
+        if (!hasAnyUserDango && entries.length > 0 && dangoLineIndex !== -1) {
+            if (this.party.length === 5) {
+                // 推論モード: お団子なし + パーティー指定あり
+                return this.inferFromContext(lines, dangoLineIndex);
+            }
+            // 推論モードを試みたがパーティー未指定 → ガイドを返す
+            return this.buildPartyGuide();
+        }
+
+        // 既存モード: ユーザー指定のお団子がある
         return this.inferAndRender(entries, lines);
     }
 
@@ -309,4 +357,221 @@ export class Princessify {
         }
         return `[${result}]`;
     }
+
+    // ========================================
+    // 推論モード
+    // ========================================
+
+    private parseInferTimeline(lines: string[]): InferEntry[] {
+        const entries: InferEntry[] = [];
+        const timeStartRegex = /^(\d{1,2}:\d{2})/;
+        let lastTimeStr = '';
+
+        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+            const line = lines[lineIndex];
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            const timeMatch = trimmed.match(timeStartRegex);
+
+            let timeStr: string;
+            let isSubLine: boolean;
+
+            if (timeMatch) {
+                // タイムスタンプ付き行
+                timeStr = timeMatch[1];
+                isSubLine = false;
+                lastTimeStr = timeStr;
+            } else {
+                // サブ行候補: 先頭が空白 + パーティーメンバー名を含む
+                if (!/^[\s　]/.test(line)) continue;
+                let hasPartyMember = false;
+                for (const member of this.party) {
+                    if (trimmed.includes(member)) {
+                        hasPartyMember = true;
+                        break;
+                    }
+                }
+                if (!hasPartyMember) continue;
+                timeStr = lastTimeStr;
+                isSubLine = true;
+            }
+
+            // キャラ名を探す（テキスト内で最も早い位置に出現するメンバーを選択）
+            let actorIndex = -1;
+            let actorName = '';
+            let actorPos = Infinity;
+            for (let i = 0; i < this.party.length; i++) {
+                const pos = trimmed.indexOf(this.party[i]);
+                if (pos !== -1 && pos < actorPos) {
+                    actorIndex = i;
+                    actorName = this.party[i];
+                    actorPos = pos;
+                }
+            }
+
+            // キャラ名の後のテキストを抽出
+            let textAfterChar = '';
+            if (actorName) {
+                textAfterChar = trimmed.substring(actorPos + actorName.length);
+            }
+
+            // UBタイプ分類
+            const ubType = classifyUBType(textAfterChar, trimmed);
+
+            // 明示的SET検出
+            const explicitSets = parseExplicitSets(trimmed, this.party);
+
+            entries.push({
+                lineIndex,
+                originalText: line,
+                timeStr,
+                actorIndex,
+                actorName,
+                ubType,
+                isSubLine,
+                explicitSets,
+            });
+        }
+
+        return entries;
+    }
+
+    private inferFromContext(lines: string[], dangoLineIndex: number): string {
+        const entries = this.parseInferTimeline(lines);
+        const resultLines = [...lines];
+
+        // AUTO UBがあるかどうか
+        const hasAnyAutoUB = entries.some(e => e.ubType === 'auto');
+
+        // SET需要の計算
+        interface Demands {
+            setOn: number[];
+            setOff: number[];
+            autoOn: boolean;
+            autoOff: boolean;
+        }
+
+        const demands = new Map<number, Demands>();
+        const getDemands = (idx: number): Demands => {
+            if (!demands.has(idx)) {
+                demands.set(idx, { setOn: [], setOff: [], autoOn: false, autoOff: false });
+            }
+            return demands.get(idx)!;
+        };
+
+        // パス1: SET/AUTO需要の構築
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+
+            // SET発動UB → 直前にSET ON、発動行でSET OFF
+            if (entry.ubType === 'set' && entry.actorIndex !== -1) {
+                if (i > 0) {
+                    getDemands(i - 1).setOn.push(entry.actorIndex);
+                }
+                getDemands(i).setOff.push(entry.actorIndex);
+            }
+
+            // AUTO発動UB → 直前にAUTO ON、発動行でAUTO OFF
+            if (entry.ubType === 'auto') {
+                if (i > 0) {
+                    getDemands(i - 1).autoOn = true;
+                }
+                getDemands(i).autoOff = true;
+            }
+
+            // 明示的SET指示
+            if (entry.explicitSets.length > 0) {
+                const d = getDemands(i);
+                for (const charIdx of entry.explicitSets) {
+                    if (!d.setOn.includes(charIdx)) {
+                        d.setOn.push(charIdx);
+                    }
+                }
+            }
+        }
+
+        // パス2: 状態計算と描画
+        const state: boolean[] = [false, false, false, false, false];
+        let autoState = false;
+
+        // 初期行の生成
+        const allOn: DangoState = [true, true, true, true, true];
+        const allOff: DangoState = [false, false, false, false, false];
+        const initialDango = this.renderDango(allOn, allOff); // [❌❌❌❌❌]
+        const initialAutoEmoji = hasAnyAutoUB ? renderAutoState(true, false) : '';
+        const initialLine = `1:30 開始 ${initialDango}${initialAutoEmoji}`;
+
+        // @dango行を初期行に置き換え
+        if (dangoLineIndex !== -1) {
+            resultLines[dangoLineIndex] = initialLine;
+        }
+
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            const d = getDemands(i);
+
+            const prevState = [...state];
+            const prevAutoState = autoState;
+
+            // SET ON適用（先に適用）
+            for (const charIdx of d.setOn) {
+                state[charIdx] = true;
+            }
+
+            // SET OFF適用
+            for (const charIdx of d.setOff) {
+                state[charIdx] = false;
+            }
+
+            // AUTO適用
+            if (d.autoOn) autoState = true;
+            if (d.autoOff) autoState = false;
+
+            // 描画
+            const dangoStr = this.renderDango(prevState, [...state]);
+            const autoEmoji = hasAnyAutoUB
+                ? renderAutoState(prevAutoState, autoState)
+                : '';
+            const fullDangoStr = dangoStr + autoEmoji;
+
+            // 🌟マーカー
+            const isManual = entry.ubType === 'manual';
+
+            // 出力行の構築
+            let newText: string;
+            if (isManual && !entry.isSubLine) {
+                newText = `🌟${entry.originalText.trimStart()} ${fullDangoStr}`;
+            } else if (entry.isSubLine) {
+                newText = `${entry.originalText} ${fullDangoStr}`;
+            } else {
+                newText = `${entry.originalText} ${fullDangoStr}`;
+            }
+
+            resultLines[entry.lineIndex] = newText;
+        }
+
+        return resultLines.join('\n');
+    }
+
+    private buildPartyGuide(): string {
+        return [
+            '推論モードにはパーティーメンバー5人の指定が必要です。',
+            '@dango の後にスペース区切りで左から順に5人のキャラ名を記述してください。',
+            '',
+            '例: @dango キャラ1 キャラ2 キャラ3 キャラ4 キャラ5',
+        ].join('\n');
+    }
+}
+
+// 推論モード用のエントリ型
+interface InferEntry {
+    lineIndex: number;
+    originalText: string;
+    timeStr: string;
+    actorIndex: number;
+    actorName: string;
+    ubType: UBType;
+    isSubLine: boolean;
+    explicitSets: number[];
 }

@@ -1,5 +1,5 @@
 // src/logic/princessify.test.ts
-import { Princessify, detectAutoState, renderAutoState } from './princessify';
+import { Princessify, detectAutoState, renderAutoState, classifyUBType, parseExplicitSets } from './princessify';
 
 // 簡易アサーション
 function assert(condition: boolean, message: string) {
@@ -525,5 +525,429 @@ console.log('--- テスト ---');
 
 assertNotIncludes(result17, '@dango', '@dango行が出力から除去される');
 assertIncludes(result17, '1:30 開始 [〇〇〇〇〇]', '@dango除去後もTL行は維持');
+
+// =============================================
+// 推論モード: Phase 1 - UBタイプ分類テスト
+// =============================================
+
+console.log('\n=== 推論モード: UBタイプ分類 ===\n');
+
+// テスト1: #で始まる → SET
+assertEqual(classifyUBType('#通常cl', '1:10 ヴァンピィ #通常cl'), 'set', '#通常cl → set');
+
+// テスト2: 最初のトークンが#でない → manual
+assertEqual(classifyUBType('秒数最速 #エイドcl', '1:17 キャル 秒数最速 #エイドcl'), 'manual', '秒数最速 #エイドcl → manual');
+
+// テスト3: AUTO → auto
+assertEqual(classifyUBType('AUTO ここでネネカset', '1:02 ヴァンピィ AUTO ここでネネカset'), 'auto', 'AUTO → auto');
+
+// テスト4: 敵UB → enemy
+assertEqual(classifyUBType('ペタラcl', '0:41 敵UB ペタラcl'), 'enemy', '敵UB → enemy');
+
+// テスト5: エイドcl最速（#なし） → manual
+assertEqual(classifyUBType('エイドcl最速 秒数最速安定', '1:00 キャル エイドcl最速'), 'manual', 'エイドcl最速 → manual');
+
+// テスト6: ブレス3hit最速（AUTOなし） → manual
+assertEqual(classifyUBType('ブレス3hit最速 UBOK安定', '0:36 ヴァンピィ ブレス3hit最速'), 'manual', 'ブレス3hit最速 → manual');
+
+// テスト6b: コメント内の敵UBは敵UBと判定しない
+assertEqual(classifyUBType('ブレス3hit早め　0:48最速可、遅いと0:41敵UB前にリンクデバフ入らない', '0:49　ヴァンピィ　ブレス3hit早め　0:48最速可、遅いと0:41敵UB前にリンクデバフ入らない'), 'manual', 'コメント内の敵UBは敵UBと判定しない');
+
+// =============================================
+// 推論モード: Phase 2 - 明示的SET検出テスト
+// =============================================
+
+console.log('\n=== 推論モード: 明示的SET検出 ===\n');
+
+// テスト7: ここでネネカset → ネネカのインデックス
+{
+    const party = ['A', 'B', 'ネネカ', 'D', 'E'];
+    const result = parseExplicitSets('ここでネネカset #サンダーデバフ後', party);
+    assertEqual(result.length, 1, 'ここでネネカset → 1件検出');
+    assertEqual(result[0], 2, 'ここでネネカset → index 2');
+}
+
+// テスト8: ここでエリスset → エリスのインデックス
+{
+    const party = ['エリス', 'B', 'C', 'D', 'E'];
+    const result = parseExplicitSets('ここでエリスset', party);
+    assertEqual(result.length, 1, 'ここでエリスset → 1件検出');
+    assertEqual(result[0], 0, 'ここでエリスset → index 0');
+}
+
+// テスト9: そのままset → パーティー名なしなので空配列
+{
+    const party = ['エリス', 'エキドナ', 'ネネカ', 'キャル', 'ヴァンピィ'];
+    const result = parseExplicitSets('遅れたらそのままset', party);
+    assertEqual(result.length, 0, 'そのままset → 0件（パーティー名なし）');
+}
+
+// テスト10: SET指示なし → 空配列
+{
+    const party = ['A', 'B', 'C', 'D', 'E'];
+    const result = parseExplicitSets('秒数最速 #エイドcl', party);
+    assertEqual(result.length, 0, 'SET指示なし → 0件');
+}
+
+// =============================================
+// 推論モード: Phase 3-6 統合テスト
+// =============================================
+
+console.log('\n=== 推論モード: 簡易推論テスト（手動→SET→手動）===\n');
+
+// テスト11-16: 3行入力（手動→SET→手動）
+// パーティー: A(0), B(1), C(2), D(3), E(4)
+// 1:20 A 手動（manual）
+// 1:10 B #通常cl（SET）→ 直前行(1:20)でB(1)をSET ON、1:10でSET OFF
+// 1:00 C 手動（manual）
+const toolInfer1 = new Princessify();
+const inputInfer1 = `
+@dango A B C D E
+
+1:20 A 手動発動
+1:10 B #通常cl
+1:00 C 手動発動
+`;
+
+const resultInfer1 = toolInfer1.convert(inputInfer1);
+console.log('--- 推論結果（簡易3行）---');
+console.log(resultInfer1);
+console.log('--- テスト ---');
+
+// テスト11: 初期行が生成される
+assertIncludes(resultInfer1, '1:30 開始 [❌❌❌❌❌]', '初期行が生成される');
+
+// テスト12: 1:20（手動）にSET ON for B(1) が配置 + 🌟
+assertIncludes(resultInfer1, '🌟1:20 A 手動発動', '手動行に🌟が付く');
+assertIncludes(resultInfer1, '[ー⭕ーーー]', '1:20でB(1)がSET ON');
+
+// テスト13: 1:10（SET）にSET OFF for B(1)
+assertNotIncludes(resultInfer1, '🌟1:10', 'SET行に🌟は付かない');
+assertIncludes(resultInfer1, '[ー❌ーーー]', '1:10でB(1)がSET OFF');
+
+// テスト14: 1:00（手動）は状態変化なし
+assertIncludes(resultInfer1, '🌟1:00 C 手動発動', '1:00の手動行に🌟');
+assertIncludes(resultInfer1, '[ーーーーー]', '1:00は状態変化なし');
+
+console.log('\n=== 推論モード: AUTO推論テスト ===\n');
+
+// テスト17-19: AUTO推論
+// パーティー名にAUTOと衝突しない名前を使用
+const toolInfer2 = new Princessify();
+const inputInfer2 = `
+@dango 甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+1:10 乙 AUTO 発動
+1:00 丙 手動発動
+`;
+
+const resultInfer2 = toolInfer2.convert(inputInfer2);
+console.log('--- 推論結果（AUTO）---');
+console.log(resultInfer2);
+console.log('--- テスト ---');
+
+// テスト17: 1:20（AUTO UBの直前）にAUTO ON
+assertIncludes(resultInfer2, '👉✅', '1:20にAUTO ON (👉✅)');
+
+// テスト18: 1:10（AUTO発動行）でAUTO OFF
+assertIncludes(resultInfer2, '👉⬛', '1:10にAUTO OFF (👉⬛)');
+
+// テスト19: AUTO UBがないTLでは絵文字なし
+const toolInfer3 = new Princessify();
+const inputInfer3 = `
+@dango A B C D E
+
+1:20 A 手動発動
+1:10 B #通常cl
+`;
+
+const resultInfer3 = toolInfer3.convert(inputInfer3);
+assertNotIncludes(resultInfer3, '✅', 'AUTO UBなしTLに✅は付かない');
+
+console.log('\n=== 推論モード: サブ行テスト ===\n');
+
+// テスト20: サブ行（タイムスタンプなし）がSETの場合
+const toolInfer4 = new Princessify();
+const inputInfer4 = `
+@dango A B C D E
+
+1:20 A 手動発動
+1:10 B 手動発動
+    C #通常cl
+1:00 D 手動発動
+`;
+
+const resultInfer4 = toolInfer4.convert(inputInfer4);
+console.log('--- 推論結果（サブ行）---');
+console.log(resultInfer4);
+console.log('--- テスト ---');
+
+// メイン行(1:10 B)にC(2)のSET ONが配置される
+assertIncludes(resultInfer4, '[ーー⭕ーー]', 'メイン行でC(2)がSET ON');
+// サブ行(C #通常cl)でC(2)がSET OFF
+assertIncludes(resultInfer4, '[ーー❌ーー]', 'サブ行でC(2)がSET OFF');
+
+// =============================================
+// Phase 7: モード自動判別テスト
+// =============================================
+
+console.log('\n=== Phase 7: お団子あり → 既存モード ===\n');
+
+// テスト24: お団子ありの入力 → 既存モード（推論モードにならない）
+{
+    const tool = new Princessify();
+    const input = `
+@dango A B C D E
+
+1:30 開始 [〇〇〇〇〇]
+1:20 A [〇〇ーーー]
+`;
+    const result = tool.convert(input);
+    console.log('--- 変換結果（お団子あり → 既存モード） ---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // 既存モードでは🌟は付かない
+    assertNotIncludes(result, '🌟', 'お団子ありでは🌟が付かない（既存モード）');
+    // 既存モードの差分計算が正しく動く
+    assertIncludes(result, '1:20 A [〇〇❌❌❌]', 'お団子ありで差分計算が動く（既存モード）');
+    // 初期行はそのまま（推論モードの自動生成ではない）
+    assertIncludes(result, '1:30 開始 [〇〇〇〇〇]', 'ユーザー提供の初期行がそのまま維持');
+}
+
+console.log('\n=== Phase 7: お団子なし + @dango → 推論モード ===\n');
+
+// テスト25: お団子なし + @dango → 推論モード
+{
+    const tool = new Princessify();
+    const input = `
+@dango A B C D E
+
+1:20 A 手動発動
+1:10 B #通常cl
+`;
+    const result = tool.convert(input);
+    console.log('--- 変換結果（お団子なし → 推論モード） ---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // 推論モードでは🌟が付く
+    assertIncludes(result, '🌟', 'お団子なしで🌟が付く（推論モード）');
+    // 推論モードでは初期行が自動生成される
+    assertIncludes(result, '1:30 開始 [❌❌❌❌❌]', '初期行が自動生成される（推論モード）');
+    // 推論モードでSET ON/OFFが推論される
+    assertIncludes(result, '⭕', '推論モードでSET ONが推論される');
+    assertIncludes(result, '❌', '推論モードでSET OFFが推論される');
+}
+
+console.log('\n=== Phase 7: @dangoなし + お団子なし → 既存モード ===\n');
+
+// テスト26: @dangoなし + お団子なし → 既存モード（パーティー不明なので推論不可）
+{
+    const tool = new Princessify();
+    const input = `
+1:20 A 手動発動
+1:10 B 通常cl
+`;
+    const result = tool.convert(input);
+    console.log('--- 変換結果（@dangoなし → 既存モード） ---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // パーティー情報がないので推論モードにはならない
+    assertNotIncludes(result, '🌟', '@dangoなしでは推論モードにならない');
+    assertNotIncludes(result, '1:30 開始', '@dangoなしでは初期行は生成されない');
+}
+
+// =============================================
+// Phase 8: 統合テスト（フル入力）
+// =============================================
+
+console.log('\n=== Phase 8: 統合テスト（フル入力）===\n');
+
+// ヘルパー: 特定の文字列を含む行を取得
+function getLine(output: string, search: string): string {
+    return output.split('\n').find(line => line.includes(search)) || '';
+}
+
+const toolFull = new Princessify();
+const inputFull = `@dango エリス エキドナ ネネカ キャル ヴァンピィ
+
+1:17　キャル　　　秒数最速　#エイドcl　1:15サンダーをギフトバフ後
+1:11　キャル　　　秒数視認17F〜　#エイドcl　1:09サンダーを悪巧みデバフ後
+1:10　ヴァンピィ　#通常cl
+1:04　キャル　　　#通常cl
+1:02　ヴァンピィ　AUTO　ここでネネカset　#サンダーデバフ後
+1:00　キャル　　　エイドcl最速　秒数最速安定
+　　　ネネカ　　　#通常cl
+0:51　キャル　　　エイドcl最速　秒数最速安定
+0:49　ヴァンピィ　ブレス3hit早め　0:48最速可、遅いと0:41敵UB前にリンクデバフ入らない
+0:45　キャル　　　エイドcl最速　秒数視認安定、ここまで遅いと0:41敵UB前に通常開始ない
+
+0:41　敵UB　ペタラcl/待機/待機/通常cl/リンクデバフ入り
+
+0:37　エリス　　　#テールcl
+0:36　ヴァンピィ　ブレス3hit最速　UBOK安定
+　　　キャル　　　#通常cl
+0:35　エキドナ　　ペタラバフ後早め　○538m / ✕526m
+0:33　キャル　　　#エイドcl
+0:28　ネネカ　　　#ブライトcl
+0:26　ヴァンピィ　ブレス3hit最速　秒数視認安定
+0:24　キャル　　　エイドcl　適当でいい
+0:17　キャル　　　エイドcl　適当でいい
+0:16　ヴァンピィ　#ブレス3hit後ペタラ起動　0:36、0:26遅いとhit数欠損
+0:13　キャル　　　通常cl　適当でいい
+0:06　ヴァンピィ　ブレス1hit最速~2hitガチ最速　遅いと0:04敵UB来る
+　　　キャル　　　#エイドcl
+0:05　エキドナ　　悪巧み4hit最速　TP減少直前、遅れたらそのままset
+0:03　ネネカ　　　#フォレセントcl　ここでエリスset
+0:02　エリス　　　#テールcl
+0:01　キャル　　　#サンダーTP`;
+
+const resultFull = toolFull.convert(inputFull);
+console.log('--- 推論結果（フル入力）---');
+console.log(resultFull);
+console.log('--- テスト ---');
+
+// テスト28: 初期行
+assertIncludes(resultFull, '1:30 開始 [❌❌❌❌❌]👉⬛', '初期行が正しく生成される');
+
+// テスト29: 手動UBに🌟
+assertIncludes(resultFull, '🌟1:17', '1:17（手動）に🌟');
+assertIncludes(resultFull, '🌟1:11', '1:11（手動）に🌟');
+assertIncludes(resultFull, '🌟1:00', '1:00（手動）に🌟');
+assertIncludes(resultFull, '🌟0:49', '0:49（手動）に🌟');
+assertIncludes(resultFull, '🌟0:05', '0:05（手動）に🌟');
+
+// テスト30: SET/AUTO/敵UBに🌟なし
+assertNotIncludes(resultFull, '🌟1:10', '1:10（SET）に🌟なし');
+assertNotIncludes(resultFull, '🌟1:04', '1:04（SET）に🌟なし');
+assertNotIncludes(resultFull, '🌟1:02', '1:02（AUTO）に🌟なし');
+assertNotIncludes(resultFull, '🌟0:41', '0:41（敵UB）に🌟なし');
+assertNotIncludes(resultFull, '🌟0:37', '0:37（SET）に🌟なし');
+
+// テスト31: SET ON/OFF推論
+{
+    const line = getLine(resultFull, '1:11　キャル');
+    assertIncludes(line, '[ーーーー⭕]', '1:11でヴァンピィ(4)がSET ON');
+}
+{
+    const line = getLine(resultFull, '1:10　ヴァンピィ');
+    assertIncludes(line, '[ーーー⭕❌]', '1:10でキャル(3)ON + ヴァンピィ(4)OFF');
+}
+{
+    const line = getLine(resultFull, '1:04　キャル');
+    assertIncludes(line, '[ーーー❌ー]', '1:04でキャル(3)がSET OFF');
+}
+
+// テスト32: AUTO推論
+{
+    const line = getLine(resultFull, '1:04　キャル');
+    assertIncludes(line, '👉✅', '1:04でAUTO ON');
+}
+{
+    const line = getLine(resultFull, '1:02　ヴァンピィ');
+    assertIncludes(line, '👉⬛', '1:02でAUTO OFF');
+}
+
+// テスト33: 明示的SET（ここでネネカset）
+{
+    const line = getLine(resultFull, '1:02　ヴァンピィ');
+    assertIncludes(line, '[ーー⭕ーー]', '1:02でネネカ(2)が明示的SET ON');
+}
+
+// テスト34: サブ行のSET OFF
+{
+    const line = getLine(resultFull, 'ネネカ　　　#通常cl');
+    assertIncludes(line, '[ーー❌ーー]', 'サブ行でネネカ(2)がSET OFF');
+}
+
+// テスト35: 敵UBラインにSET ON配置
+{
+    const line = getLine(resultFull, '0:41　敵UB');
+    assertIncludes(line, '[⭕ーーーー]', '0:41敵UBでエリス(0)がSET ON');
+}
+
+// テスト36: コメント内の「敵UB」で誤判定しない
+{
+    const line = getLine(resultFull, '0:49　ヴァンピィ');
+    assertIncludes(line, '🌟', '0:49はコメントに敵UBがあるが手動UB');
+}
+
+// テスト37: 明示的SET（ここでエリスset）
+{
+    const line = getLine(resultFull, '0:03　ネネカ');
+    assertIncludes(line, '[⭕ー❌ーー]', '0:03でエリス(0)ON + ネネカ(2)OFF');
+}
+
+// テスト38: 最後のSET連鎖
+{
+    const line = getLine(resultFull, '0:02　エリス');
+    assertIncludes(line, '[❌ーー⭕ー]', '0:02でエリス(0)OFF + キャル(3)ON');
+}
+{
+    const line = getLine(resultFull, '0:01　キャル');
+    assertIncludes(line, '[ーーー❌ー]', '0:01でキャル(3)がSET OFF');
+}
+
+// =============================================
+// パーティー未指定ガイドテスト
+// =============================================
+
+console.log('\n=== パーティー未指定ガイドテスト ===\n');
+
+// テスト39: @dangoのみ（パーティー名なし）+ お団子なし → ガイドメッセージ
+{
+    const tool = new Princessify();
+    const input = `@dango
+
+1:17 キャル 秒数最速 #エイドcl
+1:10 ヴァンピィ #通常cl
+`;
+    const result = tool.convert(input);
+    console.log('--- 変換結果（パーティー未指定）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    assertIncludes(result, '@dango', 'ガイドに@dangoの書式が含まれる');
+    assertIncludes(result, 'キャラ1', 'ガイドにキャラ名プレースホルダーが含まれる');
+    assertNotIncludes(result, '🌟', 'ガイド時に推論結果は出ない');
+}
+
+// テスト40: @dango + パーティー名不足（3人）+ お団子なし → ガイドメッセージ
+{
+    const tool = new Princessify();
+    const input = `@dango A B C
+
+1:17 キャル 秒数最速 #エイドcl
+1:10 ヴァンピィ #通常cl
+`;
+    const result = tool.convert(input);
+    console.log('--- 変換結果（パーティー不足）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    assertIncludes(result, '@dango', 'パーティー不足時もガイドが出る');
+    assertIncludes(result, '5', 'ガイドに5人必要であることが示される');
+}
+
+// テスト41: @dango + パーティー名なし + お団子あり → 既存モード（ガイドなし）
+{
+    const tool = new Princessify();
+    const input = `@dango
+
+1:30 開始 [〇〇〇〇〇]
+1:20 A [〇〇ーーー]
+`;
+    const result = tool.convert(input);
+    console.log('--- 変換結果（お団子あり + パーティー未指定）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // お団子ありなら既存モードで処理（ガイドは不要）
+    assertIncludes(result, '[〇〇〇〇〇]', 'お団子ありなら既存モードで処理');
+    assertNotIncludes(result, 'キャラ1', 'お団子ありならガイドは出ない');
+}
 
 console.log('\n=== テスト完了 ===\n');
