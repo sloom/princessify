@@ -18,6 +18,35 @@ const OPEN_BRACKETS = '[［【(（{｛<＜〈《「『〔';
 // 閉じ括弧として認識する文字
 const CLOSE_BRACKETS = ']］】)）}｝>＞〉》」』〕';
 
+// ========================================
+// オートON/OFF検出
+// ========================================
+
+// オートON検出: 「オート」or「AUTO」+ ON/オン
+const AUTO_ON_REGEX = /(?:オート|AUTO)[　 ]*(?:ON|ＯＮ|オン|おん)/i;
+
+// オートOFF検出: 「オート」or「AUTO」+ OFF/オフ/切
+const AUTO_OFF_REGEX = /(?:オート|AUTO)[　 ]*(?:OFF|ＯＦＦ|オフ|おふ|切り?)/i;
+
+// 独立した「切」の検出（オートOFF相当）
+// 前が空白・行頭・ASCII記号の場合、かつ後ろが空白・行末の場合にマッチ
+// 日本語文中の「切」（例:「見切れ」「大切」）は除外
+const STANDALONE_KIRI_REGEX = /(?:^|[\s!-/:-@[-`{-~！-／：-＠［-｀｛-～'＃])切(?=\s|$)/;
+
+export function detectAutoState(text: string): 'on' | 'off' | null {
+    if (AUTO_ON_REGEX.test(text)) return 'on';
+    if (AUTO_OFF_REGEX.test(text)) return 'off';
+    if (STANDALONE_KIRI_REGEX.test(text)) return 'off';
+    return null;
+}
+
+export function renderAutoState(prev: boolean, current: boolean): string {
+    if (!prev && current) return '👉✅';   // OFF → ON
+    if (prev && !current) return '👉⬛';   // ON → OFF
+    if (current) return '✅';               // ON維持
+    return '⬛';                             // OFF維持
+}
+
 interface TimelineEntry {
     lineIndex: number;      // 元の行番号
     originalText: string;   // 元の行テキスト
@@ -26,6 +55,7 @@ interface TimelineEntry {
     actorName: string;      // キャラ名
     userState: boolean[];   // ユーザーが指定したお団子状態（あれば）
     hasUserDango: boolean;  // ユーザーがお団子を指定しているか
+    autoStateChange: 'on' | 'off' | null;  // オートON/OFF切替指示
 }
 
 // 5つのスロットの状態（true=SET, false=UNSET）
@@ -63,8 +93,13 @@ export class Princessify {
     public convert(inputText: string): string {
         const lines = inputText.split('\n');
 
-        // 1. ヘッダー解析（@partyは省略可能）
-        this.parseHeader(lines);
+        // 1. ヘッダー解析（@dangoは省略可能）
+        const dangoLineIndex = this.parseHeader(lines);
+
+        // @dango行を出力から除去
+        if (dangoLineIndex !== -1) {
+            lines[dangoLineIndex] = '';
+        }
 
         // 2. タイムライン解析
         const entries = this.parseTimeline(lines);
@@ -73,17 +108,18 @@ export class Princessify {
         return this.inferAndRender(entries, lines);
     }
 
-    private parseHeader(lines: string[]) {
-        for (const line of lines) {
-            const trimmed = line.trim();
+    private parseHeader(lines: string[]): number {
+        for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
             if (trimmed.startsWith('@dango')) {
                 const parts = trimmed.substring(6).trim().split(/\s+/);
                 if (parts.length === 5) {
                     this.party = parts;
                 }
-                break;
+                return i;
             }
         }
+        return -1;
     }
 
     /**
@@ -157,6 +193,9 @@ export class Princessify {
                 }
             }
 
+            // オートON/OFF検出
+            const autoStateChange = detectAutoState(trimmed);
+
             // 処理対象の条件: 行頭付近に時間がある OR お団子がある OR キャラ名がある
             if (hasTimeNearStart || hasUserDango || actorIndex !== -1) {
                 entries.push({
@@ -166,7 +205,8 @@ export class Princessify {
                     actorIndex,
                     actorName,
                     userState,
-                    hasUserDango
+                    hasUserDango,
+                    autoStateChange
                 });
             }
         }
@@ -179,6 +219,10 @@ export class Princessify {
      */
     private inferAndRender(entries: TimelineEntry[], allLines: string[]): string {
         const resultLines = [...allLines];
+
+        // 条件付き有効化: TL内にオートON/OFF指示が1つ以上あるか
+        const hasAnyAutoDirective = entries.some(e => e.autoStateChange !== null);
+        let prevAutoState = false; // デフォルトOFF
 
         for (let i = 0; i < entries.length; i++) {
             const currentEntry = entries[i];
@@ -204,18 +248,34 @@ export class Princessify {
                 ? this.renderInitialState(currentState)
                 : this.renderDango(prevState, currentState);
 
+            // オート状態の追跡と描画
+            let currentAutoState: boolean = prevAutoState;
+            if (currentEntry.autoStateChange === 'on') {
+                currentAutoState = true;
+            } else if (currentEntry.autoStateChange === 'off') {
+                currentAutoState = false;
+            }
+
+            const autoEmoji = hasAnyAutoDirective
+                ? renderAutoState(prevAutoState, currentAutoState)
+                : '';
+            prevAutoState = currentAutoState;
+
+            // お団子 + オート絵文字を結合
+            const fullDangoStr = dangoStr + autoEmoji;
+
             // 元のテキストへの埋め込み
             let newText = currentEntry.originalText;
 
             if (this.bracketedDangoRegex.test(newText)) {
                 // 括弧付きお団子がある場合 -> 置換する
-                newText = newText.replace(this.bracketedDangoRegex, dangoStr);
+                newText = newText.replace(this.bracketedDangoRegex, fullDangoStr);
             } else if (this.noBracketDangoRegex.test(newText)) {
                 // 括弧なしお団子がある場合 -> 置換する
-                newText = newText.replace(this.noBracketDangoRegex, dangoStr);
+                newText = newText.replace(this.noBracketDangoRegex, fullDangoStr);
             } else {
                 // ない場合 -> 行末に追加
-                newText = `${newText} ${dangoStr}`;
+                newText = `${newText} ${fullDangoStr}`;
             }
 
             // 結果リストの該当行を書き換える

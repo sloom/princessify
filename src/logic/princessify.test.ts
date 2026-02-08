@@ -1,5 +1,5 @@
 // src/logic/princessify.test.ts
-import { Princessify } from './princessify';
+import { Princessify, detectAutoState, renderAutoState } from './princessify';
 
 // 簡易アサーション
 function assert(condition: boolean, message: string) {
@@ -33,11 +33,11 @@ function assertNotIncludes(actual: string, expected: string, message: string) {
     }
 }
 
-function assertEqual(actual: string, expected: string, message: string) {
+function assertEqual(actual: any, expected: any, message: string) {
     if (actual !== expected) {
         console.error(`❌ FAIL: ${message}`);
-        console.error(`   Expected: "${expected}"`);
-        console.error(`   Actual:   "${actual}"`);
+        console.error(`   Expected: ${JSON.stringify(expected)}`);
+        console.error(`   Actual:   ${JSON.stringify(actual)}`);
         process.exitCode = 1;
     } else {
         console.log(`✅ PASS: ${message}`);
@@ -214,14 +214,14 @@ console.log('--- 変換結果（括弧なし） ---');
 console.log(result6);
 console.log('--- テスト ---');
 
-// 1:30 初期状態: XOXXX → [ー〇ーーー]
-assertIncludes(result6, '1:30 開始 [ー〇ーーー] オートOFF', '括弧なしお団子が認識される（初期行）');
+// 1:30 初期状態: XOXXX → [ー〇ーーー]、オートOFF指示（デフォルトOFF→OFF=⬛）
+assertIncludes(result6, '1:30 開始 [ー〇ーーー]⬛ オートOFF', '括弧なしお団子が認識される（初期行）+ オート⬛');
 
-// 1:06 ペコ: XOXXX → OXOXX (index 0: OFF→ON, index 1: ON→OFF, index 2: OFF→ON)
-assertIncludes(result6, '1:06 ペコ [⭕❌⭕ーー] オートOFF', '括弧なしお団子の差分計算');
+// 1:06 ペコ: XOXXX → OXOXX、オートOFF維持（⬛）
+assertIncludes(result6, '1:06 ペコ [⭕❌⭕ーー]⬛ オートOFF', '括弧なしお団子の差分計算 + オート⬛');
 
-// 1:01 ペコ: OXOXX → OXOOX (index 3: OFF→ON)
-assertIncludes(result6, '1:01 ペコ [〇ー〇⭕ー] オートON', '括弧なしお団子の差分計算（2）');
+// 1:01 ペコ: OXOXX → OXOOX、オートON切替（OFF→ON=👉✅）
+assertIncludes(result6, '1:01 ペコ [〇ー〇⭕ー]👉✅ オートON', '括弧なしお団子の差分計算（2）+ オート👉✅');
 
 console.log('\n=== 括弧なし複合テスト ===\n');
 
@@ -353,5 +353,177 @@ console.log('--- テスト ---');
 
 // キャラ名Aがある行も処理される（お団子なしでも）
 assertIncludes(result12, '1:20 A アクション [〇〇〇〇〇]', '@dango + キャラ名指定で動作');
+
+// =============================================
+// オートON/OFF検出テスト (Phase 1)
+// =============================================
+
+console.log('\n=== オート検出: 基本テスト ===\n');
+
+// テスト1: オートOFF → OFF切替を検出
+assertEqual(detectAutoState('オートOFF'), 'off', 'オートOFF → off');
+
+// テスト2: オートON → ON切替を検出
+assertEqual(detectAutoState('オートON'), 'on', 'オートON → on');
+
+// テスト3: オートのみ → 状態変更なし
+assertEqual(detectAutoState('オート'), null, 'オート のみ → null');
+assertEqual(detectAutoState('AUTO'), null, 'AUTO のみ → null');
+assertEqual(detectAutoState('オートで発動'), null, 'オートで発動 → null');
+
+console.log('\n=== オート検出: 表記揺らぎテスト ===\n');
+
+// テスト4: 表記揺らぎ
+assertEqual(detectAutoState('オートオン'), 'on', 'オートオン → on');
+assertEqual(detectAutoState('オートオフ'), 'off', 'オートオフ → off');
+assertEqual(detectAutoState('AUTO ON'), 'on', 'AUTO ON → on');
+assertEqual(detectAutoState('AUTO OFF'), 'off', 'AUTO OFF → off');
+assertEqual(detectAutoState('auto on'), 'on', 'auto on → on');
+assertEqual(detectAutoState('auto off'), 'off', 'auto off → off');
+assertEqual(detectAutoState('オート切'), 'off', 'オート切 → off');
+assertEqual(detectAutoState('オート切り'), 'off', 'オート切り → off');
+
+console.log('\n=== オート検出: 独立した「切」テスト ===\n');
+
+// テスト5: 独立した「切」→ OFF
+assertEqual(detectAutoState("'切"), 'off', "'切 → off");
+assertEqual(detectAutoState('#切'), 'off', '#切 → off');
+assertEqual(detectAutoState('切 スキル'), 'off', '行頭の切+スペース → off');
+
+// テスト6: 日本語文中の「切」→ 誤検出しない
+assertEqual(detectAutoState('見切れてしまうので注意'), null, '見切れ → null（誤検出しない）');
+assertEqual(detectAutoState('大切なポイント'), null, '大切 → null（誤検出しない）');
+
+// =============================================
+// オート状態描画テスト (Phase 2)
+// =============================================
+
+console.log('\n=== オート状態描画テスト ===\n');
+
+// テスト7: OFF→OFF = ⬛
+assertEqual(renderAutoState(false, false), '⬛', 'OFF→OFF = ⬛');
+
+// テスト8: ON→ON = ✅
+assertEqual(renderAutoState(true, true), '✅', 'ON→ON = ✅');
+
+// テスト9: OFF→ON = 👉✅
+assertEqual(renderAutoState(false, true), '👉✅', 'OFF→ON = 👉✅');
+
+// テスト10: ON→OFF = 👉⬛
+assertEqual(renderAutoState(true, false), '👉⬛', 'ON→OFF = 👉⬛');
+
+// =============================================
+// オート統合テスト (Phase 3)
+// =============================================
+
+console.log('\n=== オート統合: デフォルトOFF + オートOFF行 ===\n');
+
+// テスト11: デフォルトOFF + オートOFF行 → 初行は👉⬛（OFF→OFFだがオートOFF指示あり）
+// 実は初行でオートOFFの指示 → デフォルトがOFFなのでOFF維持 = ⬛ではなく、
+// detectAutoStateが'off'を返し、初行のデフォルトOFFから変化なしなので⬛
+const tool13 = new Princessify();
+const input13 = `
+@dango A B C D E
+
+1:30 開始 [〇〇〇〇〇] オートOFF
+1:20 A [〇〇ーーー] オートON
+1:10 B [〇〇〇ーー]
+`;
+
+const result13 = tool13.convert(input13);
+console.log('--- 変換結果（オートOFF→ON→維持） ---');
+console.log(result13);
+console.log('--- テスト ---');
+
+// 1:30 初行: オートOFF指示、デフォルトOFF→OFF = ⬛（初期状態OFF、OFF指示で変化なし）
+assertIncludes(result13, '1:30 開始 [〇〇〇〇〇]⬛ オートOFF', 'デフォルトOFF + オートOFF → ⬛');
+
+// 1:20: オートON指示、OFF→ON = 👉✅
+assertIncludes(result13, '1:20 A [〇〇❌❌❌]👉✅ オートON', 'OFF→ON = 👉✅');
+
+// 1:10: オート指示なし、ON維持 = ✅
+assertIncludes(result13, '1:10 B [〇〇⭕ーー]✅', 'ON維持 = ✅');
+
+console.log('\n=== オート統合: 複数回切替 ===\n');
+
+// テスト12: オートON→OFF→ON の複数回切替
+const tool14 = new Princessify();
+const input14 = `
+@dango A B C D E
+
+1:30 開始 [〇〇〇〇〇] オートON
+1:20 A [〇〇ーーー] オートOFF
+1:10 B [〇〇〇ーー] オートON
+`;
+
+const result14 = tool14.convert(input14);
+console.log('--- 変換結果（ON→OFF→ON切替） ---');
+console.log(result14);
+console.log('--- テスト ---');
+
+assertIncludes(result14, '1:30 開始 [〇〇〇〇〇]👉✅ オートON', '初行でON切替 = 👉✅');
+assertIncludes(result14, '1:20 A [〇〇❌❌❌]👉⬛ オートOFF', 'ON→OFF = 👉⬛');
+assertIncludes(result14, '1:10 B [〇〇⭕ーー]👉✅ オートON', 'OFF→ON = 👉✅');
+
+console.log('\n=== オート統合: オート指示なしTLでは絵文字なし ===\n');
+
+// テスト13: オート指示がないTLでは絵文字が付かない
+const tool15 = new Princessify();
+const input15 = `
+@dango A B C D E
+
+1:30 開始 [〇〇〇〇〇]
+1:20 A [〇〇ーーー]
+`;
+
+const result15 = tool15.convert(input15);
+console.log('--- 変換結果（オート指示なし） ---');
+console.log(result15);
+console.log('--- テスト ---');
+
+assertIncludes(result15, '1:30 開始 [〇〇〇〇〇]', 'オート指示なし → 絵文字なし');
+assertNotIncludes(result15, '⬛', 'オート指示なしTLに⬛は付かない');
+assertNotIncludes(result15, '✅', 'オート指示なしTLに✅は付かない');
+
+console.log('\n=== オート統合: メモのみの行テスト ===\n');
+
+// テスト14: 「オート」メモのみ → 状態変更なし、でも他の行にオート指示があれば絵文字は出る
+const tool16 = new Princessify();
+const input16 = `
+@dango A B C D E
+
+1:30 開始 [〇〇〇〇〇] オートOFF
+1:20 A オート [〇〇ーーー]
+1:10 B [〇〇〇ーー] オートON
+`;
+
+const result16 = tool16.convert(input16);
+console.log('--- 変換結果（オートメモ行） ---');
+console.log(result16);
+console.log('--- テスト ---');
+
+// 1:20: 「オート」のみ → 状態変更なし、前行のOFFを維持 = ⬛
+assertIncludes(result16, '1:20 A オート [〇〇❌❌❌]⬛', 'オートメモ行は状態変更なし、⬛維持');
+
+// 1:10: オートON → OFF→ON = 👉✅
+assertIncludes(result16, '1:10 B [〇〇⭕ーー]👉✅ オートON', 'メモ行後のオートON → 👉✅');
+
+console.log('\n=== @dango行が出力から除去されるテスト ===\n');
+
+const tool17 = new Princessify();
+const input17 = `
+@dango A B C D E
+
+1:30 開始 [〇〇〇〇〇]
+1:20 A [〇〇ーーー]
+`;
+
+const result17 = tool17.convert(input17);
+console.log('--- 変換結果（@dango除去） ---');
+console.log(result17);
+console.log('--- テスト ---');
+
+assertNotIncludes(result17, '@dango', '@dango行が出力から除去される');
+assertIncludes(result17, '1:30 開始 [〇〇〇〇〇]', '@dango除去後もTL行は維持');
 
 console.log('\n=== テスト完了 ===\n');

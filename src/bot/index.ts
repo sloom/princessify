@@ -38,7 +38,7 @@ client.on(Events.MessageCreate, async message => {
             const result = tool.convert(message.content);
 
             // 結果を返信（コードブロックで囲むときれいです）
-            await message.reply(`✨ **Princessify Result** ✨\n\`\`\`text\n${result}\n\`\`\``);
+            await message.reply(`✨ **Princessify Result** ✨\n\`\`\`cs\n${result}\n\`\`\``);
             
         } catch (error) {
             console.error(error);
