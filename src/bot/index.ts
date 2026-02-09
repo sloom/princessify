@@ -1,6 +1,7 @@
 // src/bot/index.ts
 import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { Princessify, PartyGuideError } from '../logic/princessify';
+import { createServer } from 'http';
 import dotenv from 'dotenv';
 
 // .envファイルを読み込む
@@ -58,6 +59,15 @@ client.on(Events.MessageCreate, async message => {
             }
         }
     }
+});
+
+// ヘルスチェック用HTTPサーバー（Render.com + UptimeRobot でスリープ防止）
+const PORT = process.env.PORT || 3000;
+createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('OK');
+}).listen(PORT, () => {
+    console.log(`🌐 ヘルスチェックサーバー起動: ポート ${PORT}`);
 });
 
 // ログイン実行
