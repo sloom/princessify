@@ -1,7 +1,9 @@
 // src/bot/index.ts
-import { Client, GatewayIntentBits, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import { Princessify, PartyGuideError } from '../logic/princessify';
+import { ChannelStore } from './channel-store';
 import { createServer } from 'http';
+import * as path from 'path';
 import dotenv from 'dotenv';
 
 // .envファイルを読み込む
@@ -19,16 +21,85 @@ const client = new Client({
 // 変換ツールのインスタンス
 const tool = new Princessify();
 
-// 特定チャンネルID（カンマ区切りで複数指定可能、そのチャンネルでは@dango不要で動作）
-const CHANNEL_IDS: Set<string> = new Set(
+// チャンネルストア（JSONファイルで永続化、.envはシード値）
+const store = new ChannelStore(
+    path.join(__dirname, '../../data/channels.json'),
     (process.env.CHANNEL_ID ?? '').split(',').map(s => s.trim()).filter(Boolean)
 );
 
 // 起動時のイベント
-client.once(Events.ClientReady, c => {
+client.once(Events.ClientReady, async c => {
     console.log(`🤖 準備完了！ ${c.user.tag} としてログインしました。`);
-    if (CHANNEL_IDS.size > 0) {
-        console.log(`📌 チャンネル ${[...CHANNEL_IDS].join(', ')} を監視中`);
+    if (store.size > 0) {
+        console.log(`📌 ${store.size} チャンネルを監視中`);
+    }
+
+    // スラッシュコマンド登録
+    const rest = new REST().setToken(process.env.DISCORD_TOKEN!);
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('dango')
+            .setDescription('Princessify の設定')
+            .addSubcommand(sub => sub.setName('add').setDescription('このチャンネルを監視対象に追加'))
+            .addSubcommand(sub => sub.setName('remove').setDescription('このチャンネルを監視対象から削除'))
+            .addSubcommand(sub => sub.setName('list').setDescription('このサーバーの監視チャンネル一覧'))
+            .setDefaultMemberPermissions(null)
+    ];
+    try {
+        await rest.put(Routes.applicationCommands(c.user.id), { body: commands.map(cmd => cmd.toJSON()) });
+        console.log('📝 スラッシュコマンド登録完了');
+    } catch (err) {
+        console.error('スラッシュコマンド登録失敗:', err);
+    }
+});
+
+// スラッシュコマンド処理
+client.on(Events.InteractionCreate, async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+    if (interaction.commandName !== 'dango') return;
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === 'add' || sub === 'remove') {
+        // 権限チェック: サーバー管理権限
+        if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+            await interaction.reply({ content: '⛔ この操作にはサーバー管理権限が必要です。', ephemeral: true });
+            return;
+        }
+    }
+
+    if (sub === 'add') {
+        const added = store.add(interaction.channelId);
+        await interaction.reply({
+            content: added
+                ? `✅ <#${interaction.channelId}> を監視対象に追加しました。このチャンネルでは @dango なしでTLが処理されます。`
+                : `ℹ️ <#${interaction.channelId}> は既に監視対象です。`,
+            ephemeral: true
+        });
+    } else if (sub === 'remove') {
+        const removed = store.remove(interaction.channelId);
+        await interaction.reply({
+            content: removed
+                ? `✅ <#${interaction.channelId}> を監視対象から削除しました。`
+                : `ℹ️ <#${interaction.channelId}> は監視対象に含まれていません。`,
+            ephemeral: true
+        });
+    } else if (sub === 'list') {
+        const guild = interaction.guild;
+        if (!guild) {
+            await interaction.reply({ content: '⛔ サーバー内でのみ使用できます。', ephemeral: true });
+            return;
+        }
+        const guildChannelIds = guild.channels.cache
+            .filter(ch => ch.type === ChannelType.GuildText)
+            .map(ch => ch.id);
+        const monitored = store.listForGuild(guildChannelIds);
+        if (monitored.length === 0) {
+            await interaction.reply({ content: 'ℹ️ このサーバーには監視対象のチャンネルがありません。', ephemeral: true });
+        } else {
+            const list = monitored.map(id => `• <#${id}>`).join('\n');
+            await interaction.reply({ content: `📌 **監視中のチャンネル:**\n${list}`, ephemeral: true });
+        }
     }
 });
 
@@ -37,7 +108,7 @@ client.on(Events.MessageCreate, async message => {
     // 自分自身のメッセージは無視する（無限ループ防止）
     if (message.author.bot) return;
 
-    const isTargetChannel = CHANNEL_IDS.has(message.channelId);
+    const isTargetChannel = store.has(message.channelId);
     const hasDangoTrigger = message.content.includes('@dango');
 
     if (isTargetChannel || hasDangoTrigger) {
