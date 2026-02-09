@@ -1,5 +1,5 @@
 // src/bot/index.ts
-import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
+import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } from 'discord.js';
 import { Princessify, PartyGuideError } from '../logic/princessify';
 import { ChannelStore } from './channel-store';
 import { createServer } from 'http';
@@ -63,7 +63,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (sub === 'add' || sub === 'remove') {
         // 権限チェック: サーバー管理権限
         if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-            await interaction.reply({ content: '⛔ この操作にはサーバー管理権限が必要です。', ephemeral: true });
+            await interaction.reply({ content: '⛔ この操作にはサーバー管理権限が必要です。', flags: MessageFlags.Ephemeral });
             return;
         }
     }
@@ -74,7 +74,7 @@ client.on(Events.InteractionCreate, async interaction => {
             content: added
                 ? `✅ <#${interaction.channelId}> を監視対象に追加しました。このチャンネルでは @dango なしでTLが処理されます。`
                 : `ℹ️ <#${interaction.channelId}> は既に監視対象です。`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     } else if (sub === 'remove') {
         const removed = store.remove(interaction.channelId);
@@ -82,12 +82,12 @@ client.on(Events.InteractionCreate, async interaction => {
             content: removed
                 ? `✅ <#${interaction.channelId}> を監視対象から削除しました。`
                 : `ℹ️ <#${interaction.channelId}> は監視対象に含まれていません。`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     } else if (sub === 'list') {
         const guild = interaction.guild;
         if (!guild) {
-            await interaction.reply({ content: '⛔ サーバー内でのみ使用できます。', ephemeral: true });
+            await interaction.reply({ content: '⛔ サーバー内でのみ使用できます。', flags: MessageFlags.Ephemeral });
             return;
         }
         const guildChannelIds = guild.channels.cache
@@ -95,10 +95,10 @@ client.on(Events.InteractionCreate, async interaction => {
             .map(ch => ch.id);
         const monitored = store.listForGuild(guildChannelIds);
         if (monitored.length === 0) {
-            await interaction.reply({ content: 'ℹ️ このサーバーには監視対象のチャンネルがありません。', ephemeral: true });
+            await interaction.reply({ content: 'ℹ️ このサーバーには監視対象のチャンネルがありません。', flags: MessageFlags.Ephemeral });
         } else {
             const list = monitored.map(id => `• <#${id}>`).join('\n');
-            await interaction.reply({ content: `📌 **監視中のチャンネル:**\n${list}`, ephemeral: true });
+            await interaction.reply({ content: `📌 **監視中のチャンネル:**\n${list}`, flags: MessageFlags.Ephemeral });
         }
     }
 });
@@ -134,7 +134,7 @@ client.on(Events.MessageCreate, async message => {
     }
 });
 
-// ヘルスチェック用HTTPサーバー（Render.com + UptimeRobot でスリープ防止）
+// ヘルスチェック用HTTPサーバー
 const PORT = process.env.PORT || 3000;
 createServer((_req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
