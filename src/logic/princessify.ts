@@ -117,6 +117,17 @@ function buildNoBracketDangoRegex(): RegExp {
     return new RegExp(`(?<=\\s)([${dangoChars}]{5})(?=\\s|$)`);
 }
 
+export class PartyGuideError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'PartyGuideError';
+    }
+}
+
+export interface ConvertOptions {
+    channelMode?: boolean;
+}
+
 export class Princessify {
     private party: string[] = [];
 
@@ -126,11 +137,13 @@ export class Princessify {
     // 括弧なしお団子を見つける正規表現（5文字ちょうど）
     private readonly noBracketDangoRegex = buildNoBracketDangoRegex();
 
-    public convert(inputText: string): string {
+    public convert(inputText: string, options?: ConvertOptions): string {
+        this.party = [];
         const lines = inputText.split('\n');
+        const channelMode = options?.channelMode ?? false;
 
         // 1. ヘッダー解析（@dangoは省略可能）
-        const dangoLineIndex = this.parseHeader(lines);
+        const dangoLineIndex = this.parseHeader(lines, channelMode);
 
         // @dango行を出力から除去
         if (dangoLineIndex !== -1) {
@@ -148,15 +161,21 @@ export class Princessify {
                 // 推論モード: お団子なし + パーティー指定あり
                 return this.inferFromContext(lines, dangoLineIndex);
             }
-            // 推論モードを試みたがパーティー未指定 → ガイドを返す
-            return this.buildPartyGuide();
+            // 推論モードを試みたがパーティー未指定 → エラー
+            throw this.buildPartyGuide();
+        }
+
+        // channelMode: お団子なし + パーティ定義もなし → エラー
+        if (channelMode && !hasAnyUserDango && dangoLineIndex === -1) {
+            throw this.buildChannelPartyGuide();
         }
 
         // 既存モード: ユーザー指定のお団子がある
         return this.inferAndRender(entries, lines);
     }
 
-    private parseHeader(lines: string[]): number {
+    private parseHeader(lines: string[], channelMode: boolean = false): number {
+        // まず @dango 行を探す（channelMode でも @dango があれば優先）
         for (let i = 0; i < lines.length; i++) {
             const trimmed = lines[i].trim();
             if (trimmed.startsWith('@dango')) {
@@ -167,6 +186,23 @@ export class Princessify {
                 return i;
             }
         }
+
+        // channelMode: @dango がない場合、最初の意味のある行をパーティ定義とみなす
+        if (channelMode) {
+            const timeStartRegex = /^\d{1,2}:\d{2}/;
+            for (let i = 0; i < lines.length; i++) {
+                const trimmed = lines[i].trim();
+                if (!trimmed) continue; // 空行スキップ
+                if (timeStartRegex.test(trimmed)) continue; // TL行はスキップ
+                const parts = trimmed.split(/\s+/);
+                if (parts.length === 5) {
+                    this.party = parts;
+                    return i;
+                }
+                break; // 5人でない非空行に到達 → パーティ定義なし
+            }
+        }
+
         return -1;
     }
 
@@ -554,13 +590,26 @@ export class Princessify {
         return resultLines.join('\n');
     }
 
-    private buildPartyGuide(): string {
-        return [
+    private buildPartyGuide(): PartyGuideError {
+        return new PartyGuideError([
             '推論モードにはパーティーメンバー5人の指定が必要です。',
             '@dango の後にスペース区切りで左から順に5人のキャラ名を記述してください。',
             '',
             '例: @dango キャラ1 キャラ2 キャラ3 キャラ4 キャラ5',
-        ].join('\n');
+        ].join('\n'));
+    }
+
+    private buildChannelPartyGuide(): PartyGuideError {
+        return new PartyGuideError([
+            'パーティーメンバー5人の指定が必要です。',
+            '1行目にスペース区切りで左から順に5人のキャラ名を記述してください。',
+            '',
+            '例:',
+            'キャラ1 キャラ2 キャラ3 キャラ4 キャラ5',
+            '',
+            '1:20 キャラ1 手動発動',
+            '1:10 キャラ2 #通常cl',
+        ].join('\n'));
     }
 }
 

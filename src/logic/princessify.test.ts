@@ -1,5 +1,5 @@
 // src/logic/princessify.test.ts
-import { Princessify, detectAutoState, renderAutoState, classifyUBType, parseExplicitSets } from './princessify';
+import { Princessify, PartyGuideError, detectAutoState, renderAutoState, classifyUBType, parseExplicitSets } from './princessify';
 
 // 簡易アサーション
 function assert(condition: boolean, message: string) {
@@ -897,7 +897,7 @@ assertNotIncludes(resultFull, '🌟0:37', '0:37（SET）に🌟なし');
 
 console.log('\n=== パーティー未指定ガイドテスト ===\n');
 
-// テスト39: @dangoのみ（パーティー名なし）+ お団子なし → ガイドメッセージ
+// テスト39: @dangoのみ（パーティー名なし）+ お団子なし → PartyGuideError
 {
     const tool = new Princessify();
     const input = `@dango
@@ -905,17 +905,18 @@ console.log('\n=== パーティー未指定ガイドテスト ===\n');
 1:17 キャル 秒数最速 #エイドcl
 1:10 ヴァンピィ #通常cl
 `;
-    const result = tool.convert(input);
-    console.log('--- 変換結果（パーティー未指定）---');
-    console.log(result);
-    console.log('--- テスト ---');
-
-    assertIncludes(result, '@dango', 'ガイドに@dangoの書式が含まれる');
-    assertIncludes(result, 'キャラ1', 'ガイドにキャラ名プレースホルダーが含まれる');
-    assertNotIncludes(result, '🌟', 'ガイド時に推論結果は出ない');
+    let caught: PartyGuideError | null = null;
+    try {
+        tool.convert(input);
+    } catch (e) {
+        if (e instanceof PartyGuideError) caught = e;
+    }
+    assert(caught !== null, 'パーティー未指定で PartyGuideError が投げられる');
+    assertIncludes(caught!.message, '@dango', 'ガイドに@dangoの書式が含まれる');
+    assertIncludes(caught!.message, 'キャラ1', 'ガイドにキャラ名プレースホルダーが含まれる');
 }
 
-// テスト40: @dango + パーティー名不足（3人）+ お団子なし → ガイドメッセージ
+// テスト40: @dango + パーティー名不足（3人）+ お団子なし → PartyGuideError
 {
     const tool = new Princessify();
     const input = `@dango A B C
@@ -923,13 +924,14 @@ console.log('\n=== パーティー未指定ガイドテスト ===\n');
 1:17 キャル 秒数最速 #エイドcl
 1:10 ヴァンピィ #通常cl
 `;
-    const result = tool.convert(input);
-    console.log('--- 変換結果（パーティー不足）---');
-    console.log(result);
-    console.log('--- テスト ---');
-
-    assertIncludes(result, '@dango', 'パーティー不足時もガイドが出る');
-    assertIncludes(result, '5', 'ガイドに5人必要であることが示される');
+    let caught: PartyGuideError | null = null;
+    try {
+        tool.convert(input);
+    } catch (e) {
+        if (e instanceof PartyGuideError) caught = e;
+    }
+    assert(caught !== null, 'パーティー不足で PartyGuideError が投げられる');
+    assertIncludes(caught!.message, '5', 'ガイドに5人必要であることが示される');
 }
 
 // テスト41: @dango + パーティー名なし + お団子あり → 既存モード（ガイドなし）
@@ -948,6 +950,145 @@ console.log('\n=== パーティー未指定ガイドテスト ===\n');
     // お団子ありなら既存モードで処理（ガイドは不要）
     assertIncludes(result, '[〇〇〇〇〇]', 'お団子ありなら既存モードで処理');
     assertNotIncludes(result, 'キャラ1', 'お団子ありならガイドは出ない');
+}
+
+// =============================================
+// channelMode テスト
+// =============================================
+
+console.log('\n=== channelMode: 基本推論テスト ===\n');
+
+// テスト42: channelModeでお団子なし + 最初の行が5人パーティ → 推論モード
+{
+    const tool = new Princessify();
+    const input = `甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+1:10 乙 #通常cl
+1:00 丙 手動発動
+`;
+    const result = tool.convert(input, { channelMode: true });
+    console.log('--- 変換結果（channelMode基本）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // 推論モードで動作する
+    assertIncludes(result, '1:30 開始 [❌❌❌❌❌]', 'channelMode: 初期行が生成される');
+    assertIncludes(result, '🌟1:20', 'channelMode: 手動行に🌟');
+    assertIncludes(result, '[ー⭕ーーー]', 'channelMode: 1:20で乙(1)がSET ON');
+    // パーティ行が出力から除去される
+    assertNotIncludes(result, '甲 乙 丙 丁 戊', 'channelMode: パーティ行が出力から除去される');
+}
+
+console.log('\n=== channelMode: 空行スキップテスト ===\n');
+
+// テスト43: channelModeで先頭に空行がある場合スキップしてパーティを検出
+{
+    const tool = new Princessify();
+    const input = `
+
+甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+1:10 乙 #通常cl
+`;
+    const result = tool.convert(input, { channelMode: true });
+    console.log('--- 変換結果（channelMode空行スキップ）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    assertIncludes(result, '1:30 開始 [❌❌❌❌❌]', 'channelMode: 空行スキップ後に推論モード動作');
+    assertIncludes(result, '🌟1:20', 'channelMode: 空行スキップ後も手動行に🌟');
+}
+
+console.log('\n=== channelMode: お団子あり → 既存モードテスト ===\n');
+
+// テスト44: channelModeでもお団子が入力にあれば既存モードで動作
+{
+    const tool = new Princessify();
+    const input = `
+1:30 開始 [〇〇〇〇〇]
+1:20 アクション [〇〇ーーー]
+1:10 終了 [ーーーーー]
+`;
+    const result = tool.convert(input, { channelMode: true });
+    console.log('--- 変換結果（channelModeお団子あり）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // 既存モード: 🌟は付かない、差分計算が動く
+    assertNotIncludes(result, '🌟', 'channelMode + お団子あり: 🌟が付かない（既存モード）');
+    assertIncludes(result, '1:20 アクション [〇〇❌❌❌]', 'channelMode + お団子あり: 差分計算される');
+}
+
+console.log('\n=== channelMode: パーティ定義なし → エラーテスト ===\n');
+
+// テスト45: channelModeでお団子なし + パーティ定義なし → PartyGuideError（チャンネル用）
+{
+    const tool = new Princessify();
+    const input = `
+1:20 甲 手動発動
+1:10 乙 #通常cl
+`;
+    let caught: PartyGuideError | null = null;
+    try {
+        tool.convert(input, { channelMode: true });
+    } catch (e) {
+        if (e instanceof PartyGuideError) caught = e;
+    }
+    assert(caught !== null, 'channelMode: パーティ定義なしで PartyGuideError が投げられる');
+    assertIncludes(caught!.message, '1行目', 'channelMode: 一行目に書くよう案内');
+    assertIncludes(caught!.message, '5人', 'channelMode: 5人必要であることが示される');
+    assertNotIncludes(caught!.message, '@dango', 'channelMode: @dangoへの言及はない');
+}
+
+console.log('\n=== channelMode: @dango優先テスト ===\n');
+
+// テスト46: channelModeでも@dangoがあれば@dangoを優先
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+1:10 乙 #通常cl
+`;
+    const result = tool.convert(input, { channelMode: true });
+    console.log('--- 変換結果（channelMode + @dango）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    assertIncludes(result, '1:30 開始 [❌❌❌❌❌]', 'channelMode + @dango: 推論モード動作');
+    assertIncludes(result, '🌟1:20', 'channelMode + @dango: 手動行に🌟');
+    assertNotIncludes(result, '@dango', 'channelMode + @dango: @dango行が除去される');
+}
+
+console.log('\n=== パーティ状態リーク防止テスト ===\n');
+
+// テスト47: 同一インスタンスで2回呼び出し、前回のパーティが漏れないこと
+{
+    const tool = new Princessify();
+
+    // 1回目: パーティ付きで正常に推論
+    const input1 = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+1:10 乙 #通常cl
+`;
+    tool.convert(input1);
+
+    // 2回目: @dangoのみ（パーティ名なし）→ PartyGuideErrorが出るべき
+    const input2 = `@dango
+
+1:20 甲 手動発動
+1:10 乙 #通常cl
+`;
+    let caught: PartyGuideError | null = null;
+    try {
+        tool.convert(input2);
+    } catch (e) {
+        if (e instanceof PartyGuideError) caught = e;
+    }
+    assert(caught !== null, '同一インスタンス2回目: 前回のパーティがリークせずエラーになる');
 }
 
 console.log('\n=== テスト完了 ===\n');
