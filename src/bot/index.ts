@@ -19,14 +19,16 @@ const client = new Client({
 // 変換ツールのインスタンス
 const tool = new Princessify();
 
-// 特定チャンネルID（設定されている場合、そのチャンネルでは@dango不要で動作）
-const CHANNEL_ID = process.env.CHANNEL_ID;
+// 特定チャンネルID（カンマ区切りで複数指定可能、そのチャンネルでは@dango不要で動作）
+const CHANNEL_IDS: Set<string> = new Set(
+    (process.env.CHANNEL_ID ?? '').split(',').map(s => s.trim()).filter(Boolean)
+);
 
 // 起動時のイベント
 client.once(Events.ClientReady, c => {
     console.log(`🤖 準備完了！ ${c.user.tag} としてログインしました。`);
-    if (CHANNEL_ID) {
-        console.log(`📌 チャンネル ${CHANNEL_ID} を監視中`);
+    if (CHANNEL_IDS.size > 0) {
+        console.log(`📌 チャンネル ${[...CHANNEL_IDS].join(', ')} を監視中`);
     }
 });
 
@@ -35,7 +37,7 @@ client.on(Events.MessageCreate, async message => {
     // 自分自身のメッセージは無視する（無限ループ防止）
     if (message.author.bot) return;
 
-    const isTargetChannel = CHANNEL_ID !== undefined && message.channelId === CHANNEL_ID;
+    const isTargetChannel = CHANNEL_IDS.has(message.channelId);
     const hasDangoTrigger = message.content.includes('@dango');
 
     if (isTargetChannel || hasDangoTrigger) {
