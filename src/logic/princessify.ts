@@ -83,6 +83,56 @@ export function parseExplicitSets(
     return results;
 }
 
+// ========================================
+// 推論モード: インライン命令検出
+// ========================================
+
+export interface InlineInstructions {
+    setOn: number[];    // SET ONするキャラのインデックス
+    setOff: number[];   // SET OFFするキャラのインデックス
+    autoOn: boolean;
+    autoOff: boolean;
+}
+
+/**
+ * カンマ区切り名前を展開し、末尾のアクションキーワード付きでパーティインデックスに変換する。
+ * 例: "クルル、リノ解除" → match[1]="クルル、リノ", 名前を分割して各インデックスを返す
+ */
+function expandPartyNames(compoundName: string, party: string[]): number[] {
+    const names = compoundName.split(/[、,]/).map(s => s.trim()).filter(Boolean);
+    const indices: number[] = [];
+    for (const name of names) {
+        const idx = party.indexOf(name);
+        if (idx !== -1) indices.push(idx);
+    }
+    return indices;
+}
+
+export function parseInlineInstructions(text: string, party: string[]): InlineInstructions {
+    const setOn: number[] = [];
+    const setOff: number[] = [];
+
+    // AUTO検出（既存の detectAutoState を再利用）
+    const autoState = detectAutoState(text);
+    const autoOn = autoState === 'on';
+    const autoOff = autoState === 'off';
+
+    // SET OFF: {names}解除
+    const offRegex = /(\S+?)解除/g;
+    let m;
+    while ((m = offRegex.exec(text)) !== null) {
+        setOff.push(...expandPartyNames(m[1], party));
+    }
+
+    // SET ON: {names}セット|SET|set （ただし「ここで」の直後はスキップ）
+    const onRegex = /(?<!ここで)(\S+?)(?:セット|SET|set)/g;
+    while ((m = onRegex.exec(text)) !== null) {
+        setOn.push(...expandPartyNames(m[1], party));
+    }
+
+    return { setOn, setOff, autoOn, autoOff };
+}
+
 interface TimelineEntry {
     lineIndex: number;      // 元の行番号
     originalText: string;   // 元の行テキスト
@@ -474,6 +524,9 @@ export class Princessify {
             // 明示的SET検出
             const explicitSets = parseExplicitSets(trimmed, this.party);
 
+            // インライン命令検出
+            const inlineInstructions = parseInlineInstructions(trimmed, this.party);
+
             entries.push({
                 lineIndex,
                 originalText: line,
@@ -483,6 +536,7 @@ export class Princessify {
                 ubType,
                 isSubLine,
                 explicitSets,
+                inlineInstructions,
             });
         }
 
@@ -493,8 +547,39 @@ export class Princessify {
         const entries = this.parseInferTimeline(lines);
         const resultLines = [...lines];
 
-        // AUTO UBがあるかどうか
-        const hasAnyAutoUB = entries.some(e => e.ubType === 'auto');
+        // 初期状態行の検出と解析
+        // パーティ定義行と最初のタイムスタンプ行の間の非空行を初期状態として処理
+        const initialState: boolean[] = [false, false, false, false, false];
+        let initialAutoState = false;
+        const firstEntryLine = entries.length > 0 ? entries[0].lineIndex : lines.length;
+        const initialInstructions: InlineInstructions = { setOn: [], setOff: [], autoOn: false, autoOff: false };
+
+        for (let i = dangoLineIndex + 1; i < firstEntryLine; i++) {
+            const trimmed = lines[i].trim();
+            if (!trimmed) continue;
+            const instr = parseInlineInstructions(trimmed, this.party);
+            initialInstructions.setOn.push(...instr.setOn);
+            initialInstructions.setOff.push(...instr.setOff);
+            if (instr.autoOn) initialInstructions.autoOn = true;
+            if (instr.autoOff) initialInstructions.autoOff = true;
+            // 初期状態行を出力から除去
+            resultLines[i] = '';
+        }
+
+        // 初期状態を適用
+        for (const idx of initialInstructions.setOn) {
+            initialState[idx] = true;
+        }
+        for (const idx of initialInstructions.setOff) {
+            initialState[idx] = false;
+        }
+        if (initialInstructions.autoOn) initialAutoState = true;
+        if (initialInstructions.autoOff) initialAutoState = false;
+
+        // AUTO UBがあるかどうか（初期状態 + インライン命令のauto指示も考慮）
+        const hasAnyAutoUB = entries.some(e => e.ubType === 'auto')
+            || entries.some(e => e.inlineInstructions.autoOn || e.inlineInstructions.autoOff)
+            || initialInstructions.autoOn || initialInstructions.autoOff;
 
         // SET需要の計算
         interface Demands {
@@ -541,17 +626,34 @@ export class Princessify {
                     }
                 }
             }
+
+            // インライン命令（当行で即座に適用）
+            const inline = entry.inlineInstructions;
+            if (inline.setOn.length > 0 || inline.setOff.length > 0 || inline.autoOn || inline.autoOff) {
+                const d = getDemands(i);
+                for (const charIdx of inline.setOn) {
+                    if (!d.setOn.includes(charIdx)) {
+                        d.setOn.push(charIdx);
+                    }
+                }
+                for (const charIdx of inline.setOff) {
+                    if (!d.setOff.includes(charIdx)) {
+                        d.setOff.push(charIdx);
+                    }
+                }
+                if (inline.autoOn) d.autoOn = true;
+                if (inline.autoOff) d.autoOff = true;
+            }
         }
 
         // パス2: 状態計算と描画
-        const state: boolean[] = [false, false, false, false, false];
-        let autoState = false;
+        const state: boolean[] = [...initialState];
+        let autoState = initialAutoState;
 
-        // 初期行の生成
-        const allOn: DangoState = [true, true, true, true, true];
-        const allOff: DangoState = [false, false, false, false, false];
-        const initialDango = this.renderDango(allOn, allOff); // [❌❌❌❌❌]
-        const initialAutoEmoji = hasAnyAutoUB ? renderAutoState(true, false) : '';
+        // 初期行の生成（初期状態を反映）
+        const prevForInitial: DangoState = initialState.map(v => !v) as DangoState;
+        const initialDango = this.renderDango(prevForInitial, initialState as DangoState);
+        const initialAutoEmoji = hasAnyAutoUB ? renderAutoState(!initialAutoState, initialAutoState) : '';
         const initialLine = `1:30 開始 ${initialDango}${initialAutoEmoji}`;
 
         // @dango行を初期行に置き換え
@@ -639,4 +741,5 @@ interface InferEntry {
     ubType: UBType;
     isSubLine: boolean;
     explicitSets: number[];
+    inlineInstructions: InlineInstructions;
 }

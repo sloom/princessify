@@ -1,5 +1,5 @@
 // src/logic/princessify.test.ts
-import { Princessify, PartyGuideError, detectAutoState, renderAutoState, classifyUBType, parseExplicitSets } from './princessify';
+import { Princessify, PartyGuideError, detectAutoState, renderAutoState, classifyUBType, parseExplicitSets, parseInlineInstructions } from './princessify';
 
 // 簡易アサーション
 function assert(condition: boolean, message: string) {
@@ -1216,6 +1216,224 @@ console.log('\n=== channelMode 非TLメッセージ無視テスト ===');
         if (e instanceof PartyGuideError) threw = true;
     }
     assert(threw, '通常モード + @dango + TLなし → PartyGuideError');
+}
+
+// === parseInlineInstructions テスト ===
+// テストリスト:
+// [x] {name}セット 単体 → setOn
+// [x] {name}解除 単体 → setOff
+// [x] カンマ区切り クルル、リノ解除 → 複数setOff
+// [x] オートオン / オートオフ → autoOn/autoOff
+// [x] ここで{name}セット → スキップ（setOn=[]）
+// [x] 混在: クルルセット　水モネ解除　オートオフ
+// [x] パーティ名不一致 → 空
+// [x] ub中は無視される
+console.log('\n=== parseInlineInstructions テスト ===');
+{
+    const party = ['マホ', 'カスミ', 'リノ', '水モネ', 'クルル'];
+
+    // 1. {name}セット → setOn
+    {
+        const r = parseInlineInstructions('水モネセット', party);
+        assert(r.setOn.length === 1 && r.setOn[0] === 3, 'inline: 水モネセット → setOn=[3]');
+        assert(r.setOff.length === 0, 'inline: 水モネセット → setOff=[]');
+        assert(!r.autoOn && !r.autoOff, 'inline: 水モネセット → auto変更なし');
+    }
+
+    // 2. {name}解除 → setOff
+    {
+        const r = parseInlineInstructions('水モネ解除', party);
+        assert(r.setOff.length === 1 && r.setOff[0] === 3, 'inline: 水モネ解除 → setOff=[3]');
+        assert(r.setOn.length === 0, 'inline: 水モネ解除 → setOn=[]');
+    }
+
+    // 3. カンマ区切り解除
+    {
+        const r = parseInlineInstructions('クルル、リノ解除', party);
+        assert(r.setOff.length === 2, 'inline: クルル、リノ解除 → setOff 2個');
+        assert(r.setOff.includes(4), 'inline: クルル、リノ解除 → クルル(4)');
+        assert(r.setOff.includes(2), 'inline: クルル、リノ解除 → リノ(2)');
+    }
+
+    // 4. オートオン
+    {
+        const r = parseInlineInstructions('クルルセット　オートオン', party);
+        assert(r.setOn.includes(4), 'inline: クルルセット + オートオン → setOn=[4]');
+        assert(r.autoOn === true, 'inline: オートオン → autoOn=true');
+        assert(r.autoOff === false, 'inline: オートオン → autoOff=false');
+    }
+
+    // 4b. オートオフ
+    {
+        const r = parseInlineInstructions('水モネ解除　オートオフ', party);
+        assert(r.setOff.includes(3), 'inline: 水モネ解除 + オートオフ → setOff=[3]');
+        assert(r.autoOff === true, 'inline: オートオフ → autoOff=true');
+    }
+
+    // 5. ここで{name}セット → スキップ（parseExplicitSetsの管轄）
+    {
+        const r = parseInlineInstructions('ここで水モネセット', party);
+        assert(r.setOn.length === 0, 'inline: ここで水モネセット → setOn=[]（スキップ）');
+    }
+
+    // 6. 混在パターン
+    {
+        const r = parseInlineInstructions('クルルセット　水モネ解除　オートオフ', party);
+        assert(r.setOn.includes(4), 'inline混在: クルルセット → setOn=[4]');
+        assert(r.setOff.includes(3), 'inline混在: 水モネ解除 → setOff=[3]');
+        assert(r.autoOff === true, 'inline混在: オートオフ → autoOff=true');
+    }
+
+    // 7. パーティ名不一致 → 空
+    {
+        const r = parseInlineInstructions('未知キャラセット', party);
+        assert(r.setOn.length === 0, 'inline: パーティ名不一致 → setOn=[]');
+    }
+
+    // 8. ub中は無視される
+    {
+        const r = parseInlineInstructions('水モネub中　水モネ解除', party);
+        assert(r.setOff.includes(3), 'inline: ub中は無視、水モネ解除を検出');
+        assert(r.setOn.length === 0, 'inline: ub中は無視、setOn=[]');
+    }
+
+    // カンマ区切りセット
+    {
+        const r = parseInlineInstructions('水モネ、マホ、カスミ、リノセット', party);
+        assert(r.setOn.length === 4, 'inline: カンマ区切りセット → 4人');
+        assert(r.setOn.includes(3), 'inline: 水モネ(3)');
+        assert(r.setOn.includes(0), 'inline: マホ(0)');
+        assert(r.setOn.includes(1), 'inline: カスミ(1)');
+        assert(r.setOn.includes(2), 'inline: リノ(2)');
+    }
+}
+
+// === Phase 2: 初期状態行テスト ===
+// テストリスト:
+// [x] 初期状態行あり → 1:30 開始に反映、初期状態行は出力から除去
+// [x] 初期状態行なし → 従来通り全OFF（回帰確認）
+console.log('\n=== 初期状態行テスト ===');
+
+// 9. 初期状態行あり → 1:30 開始にSET ON/オートOFF反映
+{
+    const tool = new Princessify();
+    const input = [
+        'マホ カスミ リノ 水モネ クルル',
+        '水モネ、マホ、カスミ、リノセット　オートオフ',
+        '1:20 マホ',
+    ].join('\n');
+    const result = tool.convert(input, { channelMode: true })!;
+
+    // 初期行: 4人ON(⭕) + クルルOFF(❌), auto OFF(👉⬛)
+    assertIncludes(result, '1:30 開始 [⭕⭕⭕⭕❌]👉⬛', '初期状態行: 1:30にSET ON反映');
+
+    // 初期状態行が出力から除去されている
+    assertNotIncludes(result, '水モネ、マホ、カスミ、リノセット', '初期状態行: 出力から除去');
+
+    // 1:20 マホ: manual UB, 初期状態維持
+    assertIncludes(result, '🌟1:20 マホ [〇〇〇〇ー]⬛', '初期状態行: 1:20 マホの状態維持');
+}
+
+// 10. 初期状態行なし → 従来通り全OFF
+{
+    const tool = new Princessify();
+    const input = [
+        'マホ カスミ リノ 水モネ クルル',
+        '1:20 マホ',
+    ].join('\n');
+    const result = tool.convert(input, { channelMode: true })!;
+
+    // 初期行: 全OFF, autoなし
+    assertIncludes(result, '1:30 開始 [❌❌❌❌❌]', '初期状態行なし: 全OFF');
+
+    // 1:20 マホ: manual UB, 全OFF維持
+    assertIncludes(result, '🌟1:20 マホ [ーーーーー]', '初期状態行なし: 1:20 マホ全OFF');
+}
+
+// === Phase 3: 推論モード統合テスト ===
+// テストリスト:
+// [x] インラインセット/解除がdango出力に反映
+// [x] インラインオートオン/オフがauto出力に反映
+// [x] 完全な入力例のE2Eテスト
+console.log('\n=== 推論モード統合テスト ===');
+
+// 11. インラインセット/解除がdango出力に反映
+{
+    const tool = new Princessify();
+    const input = [
+        '甲 乙 丙 丁 戊',
+        '甲、乙、丙、丁セット',
+        '1:20 甲',
+        '1:15 乙　甲解除',
+        '1:10 丙',
+    ].join('\n');
+    const result = tool.convert(input, { channelMode: true })!;
+
+    // 初期状態: 甲乙丙丁=ON, 戊=OFF
+    assertIncludes(result, '1:30 開始 [⭕⭕⭕⭕❌]', '統合11: 初期状態4人ON');
+
+    // 1:20 甲: manual, 状態変化なし → [〇〇〇〇ー]
+    assertIncludes(result, '🌟1:20 甲 [〇〇〇〇ー]', '統合11: 1:20 甲 状態維持');
+
+    // 1:15 乙　甲解除: 乙のmanual UB + 甲をSET OFF → 甲=OFF
+    // この行でinline命令「甲解除」が適用される
+    const line1_15 = getLine(result, '1:15');
+    assertIncludes(line1_15, '[❌〇〇〇ー]', '統合11: 1:15で甲解除 → 甲❌');
+
+    // 1:10 丙: 甲=OFF維持 → [ー〇〇〇ー]
+    assertIncludes(result, '🌟1:10 丙 [ー〇〇〇ー]', '統合11: 1:10 甲OFF維持');
+}
+
+// 12. インラインオートオン/オフがauto出力に反映
+{
+    const tool = new Princessify();
+    const input = [
+        '甲 乙 丙 丁 戊',
+        '1:20 甲　オートオン',
+        '1:15 乙　オートオフ',
+    ].join('\n');
+    const result = tool.convert(input, { channelMode: true })!;
+
+    // 1:20 甲　オートオン: autoOn → auto=true
+    const line1_20 = getLine(result, '1:20');
+    assertIncludes(line1_20, '👉✅', '統合12: 1:20でオートオン');
+
+    // 1:15 乙　オートオフ: autoOff → auto=false
+    const line1_15 = getLine(result, '1:15');
+    assertIncludes(line1_15, '👉⬛', '統合12: 1:15でオートオフ');
+}
+
+// 13. 完全なE2Eテスト（ユーザーの実際のパターンに近い入力）
+{
+    const tool = new Princessify();
+    const input = [
+        'マホ カスミ リノ 水モネ クルル',
+        '水モネ、マホ、カスミ、リノセット　オートオフ',
+        '1:10 カスミ',
+        '1:05 リノ　クルルセット',
+        '1:00 クルル #通常cl',
+        '0:55 水モネ　クルル、リノ解除',
+    ].join('\n');
+    const result = tool.convert(input, { channelMode: true })!;
+
+    // 初期: マホ=ON, カスミ=ON, リノ=ON, 水モネ=ON, クルル=OFF, auto=OFF
+    assertIncludes(result, '1:30 開始 [⭕⭕⭕⭕❌]👉⬛', 'E2E: 初期状態');
+
+    // 1:10 カスミ: manual, 状態維持 [〇〇〇〇ー]⬛
+    assertIncludes(result, '🌟1:10 カスミ [〇〇〇〇ー]⬛', 'E2E: 1:10 カスミ');
+
+    // 1:05 リノ　クルルセット: manual + クルルON → [〇〇〇〇⭕]⬛
+    const line1_05 = getLine(result, '1:05');
+    assertIncludes(line1_05, '[〇〇〇〇⭕]⬛', 'E2E: 1:05 クルルセット');
+
+    // 1:00 クルル #通常cl: SET UB → 直前(1:05)でON、ここでOFF
+    // でも1:05で既にクルルON（インラインセット） → ここでクルルOFF
+    const line1_00 = getLine(result, '1:00');
+    assertIncludes(line1_00, '[〇〇〇〇❌]⬛', 'E2E: 1:00 クルル通常cl SET OFF');
+
+    // 0:55 水モネ　クルル、リノ解除: manual + クルルOFF(already) + リノOFF
+    const line0_55 = getLine(result, '0:55');
+    assertIncludes(line0_55, '[〇〇❌〇ー]⬛', 'E2E: 0:55 リノ解除');
 }
 
 console.log('\n=== テスト完了 ===\n');
