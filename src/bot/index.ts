@@ -1,6 +1,7 @@
 // src/bot/index.ts
 import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } from 'discord.js';
 import { Princessify, PartyGuideError } from '../logic/princessify';
+import { parseMochiMessage, formatMochiResult } from '../logic/mochikoshi';
 import { ChannelStore } from './channel-store';
 import { createServer } from 'http';
 import * as path from 'path';
@@ -107,6 +108,14 @@ client.on(Events.InteractionCreate, async interaction => {
 client.on(Events.MessageCreate, async message => {
     // 自分自身のメッセージは無視する（無限ループ防止）
     if (message.author.bot) return;
+
+    // @mochi: 持ち越し時間計算
+    const mochiInput = parseMochiMessage(message.content);
+    if (mochiInput) {
+        const result = formatMochiResult(mochiInput.bossHp, mochiInput.damages);
+        await message.reply(result);
+        return;
+    }
 
     const isTargetChannel = store.has(message.channelId);
     const hasDangoTrigger = message.content.includes('@dango');
