@@ -11,19 +11,19 @@ function assert(condition: boolean, message: string) {
     }
 }
 
-function assertIncludes(actual: string, expected: string, message: string) {
-    if (!actual.includes(expected)) {
+function assertIncludes(actual: string | null, expected: string, message: string) {
+    if (actual === null || !actual.includes(expected)) {
         console.error(`❌ FAIL: ${message}`);
         console.error(`   Expected to include: "${expected}"`);
-        console.error(`   Actual: "${actual}"`);
+        console.error(`   Actual: ${JSON.stringify(actual)}`);
         process.exitCode = 1;
     } else {
         console.log(`✅ PASS: ${message}`);
     }
 }
 
-function assertNotIncludes(actual: string, expected: string, message: string) {
-    if (actual.includes(expected)) {
+function assertNotIncludes(actual: string | null, expected: string, message: string) {
+    if (actual !== null && actual.includes(expected)) {
         console.error(`❌ FAIL: ${message}`);
         console.error(`   Expected NOT to include: "${expected}"`);
         console.error(`   Actual: "${actual}"`);
@@ -767,7 +767,8 @@ console.log('\n=== Phase 7: @dangoなし + お団子なし → 既存モード =
 console.log('\n=== Phase 8: 統合テスト（フル入力）===\n');
 
 // ヘルパー: 特定の文字列を含む行を取得
-function getLine(output: string, search: string): string {
+function getLine(output: string | null, search: string): string {
+    if (output === null) return '';
     return output.split('\n').find(line => line.includes(search)) || '';
 }
 
@@ -1166,6 +1167,55 @@ console.log('\n=== -dango プレフィックステスト ===');
 0:55 乙 [〇❌〇〇〇]`;
     t.convert(existingInput);
     assert(t.lastMode === 'existing', '-dango: 既存モードが動作する');
+}
+
+// === channelMode: TLでないメッセージは無視 ===
+// テストリスト:
+// [x] channelMode + 雑談テキスト（タイムスタンプなし、パーティなし）→ null
+// [x] channelMode + 複数行の雑談テキスト → null
+// [x] channelMode + タイムスタンプ行あり + パーティなし → 従来通り PartyGuideError
+// [x] 通常モード(@dango) + TLなし → 従来通り PartyGuideError（既存テスト、動作に変更なし）
+console.log('\n=== channelMode 非TLメッセージ無視テスト ===');
+{
+    const t = new Princessify();
+
+    // 雑談メッセージ → null（無視）
+    const result = t.convert('おはよう', { channelMode: true });
+    assert(result === null, 'channelMode + 雑談テキスト → null');
+}
+
+{
+    const t = new Princessify();
+
+    // 複数行の雑談 → null（無視）
+    const result = t.convert('おはよう\n今日もクラバト頑張ろう\nよろしく！', { channelMode: true });
+    assert(result === null, 'channelMode + 複数行の雑談 → null');
+}
+
+{
+    const t = new Princessify();
+
+    // タイムスタンプ行あり + パーティなし → エラー（TLっぽいがパーティ未定義）
+    let threw = false;
+    try {
+        t.convert('1:20 キャラA\n1:10 キャラB', { channelMode: true });
+    } catch (e) {
+        if (e instanceof PartyGuideError) threw = true;
+    }
+    assert(threw, 'channelMode + タイムスタンプあり + パーティなし → PartyGuideError');
+}
+
+{
+    const t = new Princessify();
+
+    // 通常モード（@dango付き）でTLなし → エラー（変更なし）
+    let threw = false;
+    try {
+        t.convert('@dango 甲 乙 丙 丁 戊');
+    } catch (e) {
+        if (e instanceof PartyGuideError) threw = true;
+    }
+    assert(threw, '通常モード + @dango + TLなし → PartyGuideError');
 }
 
 console.log('\n=== テスト完了 ===\n');

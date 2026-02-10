@@ -140,7 +140,7 @@ export class Princessify {
     // 括弧なしお団子を見つける正規表現（5文字ちょうど）
     private readonly noBracketDangoRegex = buildNoBracketDangoRegex();
 
-    public convert(inputText: string, options?: ConvertOptions): string {
+    public convert(inputText: string, options?: ConvertOptions): string | null {
         this.party = [];
         const lines = inputText.split('\n');
         const channelMode = options?.channelMode ?? false;
@@ -174,8 +174,13 @@ export class Princessify {
             throw this.buildPartyGuide();
         }
 
-        // channelMode: お団子なし + パーティ定義もなし → エラー
+        // channelMode: お団子なし + パーティ定義もなし
         if (channelMode && !hasAnyUserDango && dangoLineIndex === -1) {
+            if (entries.length === 0) {
+                // タイムスタンプ行もなし → TLではない → 無視
+                return null;
+            }
+            // タイムスタンプ行あり → TLっぽいがパーティ未定義 → エラー
             throw this.buildChannelPartyGuide();
         }
 

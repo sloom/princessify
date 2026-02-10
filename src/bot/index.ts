@@ -145,6 +145,9 @@ client.on(Events.MessageCreate, async message => {
                 channelMode: isTargetChannel && !hasDangoTrigger
             });
 
+            // null = TLではないメッセージ → 無視
+            if (result === null) return;
+
             // 結果を返信（モード別ランダムメッセージ + コードブロック）
             const greeting = pickMessage(tool.lastMode ?? 'existing');
             await message.reply(`${greeting}\n\`\`\`cs\n${result}\n\`\`\``);
