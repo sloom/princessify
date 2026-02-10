@@ -232,3 +232,21 @@ assertEqual(normalizeToMan(25000), 25000, 'normalizeToMan: 25000 → 25000（万
     assertEqual(parsed!.bossHp, 50000, '生モード(万): 50000 → 50000');
     assertEqual(parsed!.damages[0], 30000, '生モード(万): 30000 → 30000');
 }
+
+// === -mochi プレフィックス対応テスト ===
+console.log('\n=== -mochi プレフィックステスト ===');
+
+// -mochi で通常パースが動作する
+{
+    const parsed = parseMochiMessage('-mochi 5 3 2.5');
+    assertEqual(parsed!.bossHp, 50000, '-mochi: 5 → 50000');
+    assertEqual(parsed!.damages[0], 30000, '-mochi: 3 → 30000');
+    assertEqual(parsed!.damages[1], 25000, '-mochi: 2.5 → 25000');
+}
+
+// -mochi! で生モードが動作する
+{
+    const parsed = parseMochiMessage('-mochi! 50000 30000 25000');
+    assertEqual(parsed!.bossHp, 50000, '-mochi!: 生モード動作');
+    assertEqual(parsed!.damages[0], 30000, '-mochi!: damages[0]=30000');
+}

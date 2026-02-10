@@ -1143,4 +1143,29 @@ console.log('\n=== lastMode テスト ===');
     assert(t2.lastMode === null, 'lastMode: 初期値はnull');
 }
 
+// === -dango プレフィックス対応テスト ===
+console.log('\n=== -dango プレフィックステスト ===');
+{
+    const t = new Princessify();
+
+    // -dango で推論モードが動作する
+    const inferInput = `-dango 甲 乙 丙 丁 戊
+1:13 甲
+0:55 乙`;
+    const result = t.convert(inferInput);
+    assert(t.lastMode === 'inference', '-dango: 推論モードが動作する');
+    assertIncludes(result, '甲', '-dango: 結果に甲が含まれる');
+}
+
+{
+    const t = new Princessify();
+
+    // -dango で既存モードが動作する
+    const existingInput = `-dango 甲 乙 丙 丁 戊
+1:13 甲 [〇〇〇〇〇]
+0:55 乙 [〇❌〇〇〇]`;
+    t.convert(existingInput);
+    assert(t.lastMode === 'existing', '-dango: 既存モードが動作する');
+}
+
 console.log('\n=== テスト完了 ===\n');

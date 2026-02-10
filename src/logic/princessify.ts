@@ -185,11 +185,12 @@ export class Princessify {
     }
 
     private parseHeader(lines: string[], channelMode: boolean = false): number {
-        // まず @dango 行を探す（channelMode でも @dango があれば優先）
+        // まず @dango / -dango 行を探す（channelMode でも明示指定があれば優先）
         for (let i = 0; i < lines.length; i++) {
             const trimmed = lines[i].trim();
-            if (trimmed.startsWith('@dango')) {
-                const parts = trimmed.substring(6).trim().split(/\s+/);
+            const dangoMatch = trimmed.match(/^[@-]dango\s*(.*)/);
+            if (dangoMatch) {
+                const parts = dangoMatch[1].trim().split(/\s+/);
                 if (parts.length === 5) {
                     this.party = parts;
                 }

@@ -57,7 +57,7 @@ export interface MochiInput {
 }
 
 export function parseMochiMessage(text: string): MochiInput | null {
-    const match = text.match(/@mochi(!?)\s+([\d.\s]+)/);
+    const match = text.match(/[@-]mochi(!?)\s+([\d.\s]+)/);
     if (!match) return null;
     const raw = match[1] === '!';
     const tokens = match[2].trim().split(/\s+/);
