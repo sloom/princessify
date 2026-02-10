@@ -159,7 +159,12 @@ export class Princessify {
         // 3. モード判別
         const hasAnyUserDango = entries.some(e => e.hasUserDango);
 
-        if (!hasAnyUserDango && entries.length > 0 && dangoLineIndex !== -1) {
+        if (!hasAnyUserDango && dangoLineIndex !== -1) {
+            // パーティ定義あり + お団子なし → 推論モードを試みる
+            if (entries.length === 0) {
+                // TL行がない → エラー
+                throw channelMode ? this.buildChannelPartyGuide() : this.buildPartyGuide();
+            }
             if (this.party.length === 5) {
                 // 推論モード: お団子なし + パーティー指定あり
                 this.lastMode = 'inference';

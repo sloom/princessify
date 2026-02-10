@@ -1091,6 +1091,34 @@ console.log('\n=== パーティ状態リーク防止テスト ===\n');
     assert(caught !== null, '同一インスタンス2回目: 前回のパーティがリークせずエラーになる');
 }
 
+// === channelMode: パーティのみでTL行なし → エラーテスト ===
+console.log('\n=== channelMode: パーティのみでTL行なし → エラーテスト ===\n');
+{
+    const tool = new Princessify();
+    // パーティ名だけでTL行がない
+    const input = `甲 乙 丙 丁 戊`;
+    let caught: PartyGuideError | null = null;
+    try {
+        tool.convert(input, { channelMode: true });
+    } catch (e) {
+        if (e instanceof PartyGuideError) caught = e;
+    }
+    assert(caught !== null, 'channelMode: パーティのみでTL行なし → PartyGuideError');
+}
+
+// @dango + パーティのみでTL行なし → 同様にエラー
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊`;
+    let caught: PartyGuideError | null = null;
+    try {
+        tool.convert(input);
+    } catch (e) {
+        if (e instanceof PartyGuideError) caught = e;
+    }
+    assert(caught !== null, '@dango: パーティのみでTL行なし → PartyGuideError');
+}
+
 // === lastMode プロパティテスト ===
 console.log('\n=== lastMode テスト ===');
 {
