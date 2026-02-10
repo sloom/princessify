@@ -60,7 +60,7 @@ export function classifyUBType(
     if (/^\d{1,2}:\d{2}[\s　]+敵UB/.test(fullLineText.trim())) return 'enemy';
     const firstToken = textAfterCharName.trim().split(/[\s　]+/)[0] || '';
     if (firstToken.startsWith('#')) return 'set';
-    if (firstToken.toUpperCase() === 'AUTO') return 'auto';
+    if (firstToken.toUpperCase() === 'AUTO' || firstToken === 'オート') return 'auto';
     return 'manual';
 }
 

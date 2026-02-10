@@ -553,6 +553,13 @@ assertEqual(classifyUBType('ブレス3hit最速 UBOK安定', '0:36 ヴァンピ�
 // テスト6b: コメント内の敵UBは敵UBと判定しない
 assertEqual(classifyUBType('ブレス3hit早め　0:48最速可、遅いと0:41敵UB前にリンクデバフ入らない', '0:49　ヴァンピィ　ブレス3hit早め　0:48最速可、遅いと0:41敵UB前にリンクデバフ入らない'), 'manual', 'コメント内の敵UBは敵UBと判定しない');
 
+// カタカナ「オート」→ auto
+assertEqual(classifyUBType('オート　クルル解除', '1:07 水モネ　オート　クルル解除'), 'auto', 'カタカナ オート → auto');
+assertEqual(classifyUBType('オート', '0:53 水モネ　オート'), 'auto', 'カタカナ オート（単独）→ auto');
+
+// 「オートオン」「オートオフ」は firstToken にならない想定だが、万が一なった場合は manual のまま
+assertEqual(classifyUBType('オートオン', '1:20 甲　オートオン'), 'manual', 'オートオン → manual（AUTOではない）');
+
 // =============================================
 // 推論モード: Phase 2 - 明示的SET検出テスト
 // =============================================
