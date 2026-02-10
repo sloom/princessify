@@ -560,6 +560,10 @@ assertEqual(classifyUBType('オート', '0:53 水モネ　オート'), 'auto', '
 // 「オートオン」「オートオフ」は firstToken にならない想定だが、万が一なった場合は manual のまま
 assertEqual(classifyUBType('オートオン', '1:20 甲　オートオン'), 'manual', 'オートオン → manual（AUTOではない）');
 
+// ub中 → none（UB発動ではない、操作タイミングの注釈）
+assertEqual(classifyUBType('ub中　水モネ解除', '1:22 水モネ ub中　水モネ解除'), 'none', 'ub中 → none');
+assertEqual(classifyUBType('UB中　クルルセット', '1:17 カスミ UB中　クルルセット'), 'none', 'UB中（大文字）→ none');
+
 // =============================================
 // 推論モード: Phase 2 - 明示的SET検出テスト
 // =============================================

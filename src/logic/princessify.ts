@@ -51,7 +51,7 @@ export function renderAutoState(prev: boolean, current: boolean): string {
 // 推論モード: UBタイプ分類
 // ========================================
 
-export type UBType = 'manual' | 'set' | 'auto' | 'enemy';
+export type UBType = 'manual' | 'set' | 'auto' | 'enemy' | 'none';
 
 export function classifyUBType(
     textAfterCharName: string,
@@ -61,6 +61,7 @@ export function classifyUBType(
     const firstToken = textAfterCharName.trim().split(/[\s　]+/)[0] || '';
     if (firstToken.startsWith('#')) return 'set';
     if (firstToken.toUpperCase() === 'AUTO' || firstToken === 'オート') return 'auto';
+    if (/^[uU][bB]中$/.test(firstToken)) return 'none';
     return 'manual';
 }
 
