@@ -130,7 +130,7 @@ client.on(Events.MessageCreate, async message => {
             });
 
             // 結果を返信（コードブロックで囲むときれいです）
-            await message.reply(`✨ **Princessify Result** ✨\n\`\`\`cs\n${result}\n\`\`\``);
+            await message.reply(`✨ふむ。最高のTLだな。\n\`\`\`cs\n${result}\n\`\`\``);
 
         } catch (error) {
             if (error instanceof PartyGuideError) {
