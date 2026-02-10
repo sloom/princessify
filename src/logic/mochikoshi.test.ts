@@ -137,21 +137,21 @@ assertEqual(
 // @mochi を含まない → null
 assertEqual(parseMochiMessage('hello world'), null, 'パース: @mochiなし → null');
 
-// --- 出力フォーマット ---
+// --- 出力フォーマット（案A: パターンヘッダ + 2行構成） ---
 {
     const output = formatMochiResult(50000, [30000, 25000]);
     const lines = output.split('\n');
-    assertEqual(lines[0], '敵の残りHP: 50000', 'フォーマット: 1行目はHP');
-    assertEqual(
-        lines[1],
-        '1人目: 30000, 2人目(〆): 25000 の持ち越し秒数は 38 秒です。フル持ち越し必要DMG: 85714.3 万',
-        'フォーマット: 2行目は〆=25000のケース'
-    );
-    assertEqual(
-        lines[2],
-        '1人目: 25000, 2人目(〆): 30000 の持ち越し秒数は 35 秒です。フル持ち越し必要DMG: 107142.9 万',
-        'フォーマット: 3行目は〆=30000のケース'
-    );
+    assertEqual(lines[0], '🧮 敵の残りHP: 50000', 'フォーマット: 1行目はHP（絵文字付き）');
+    assertEqual(lines[1], '', 'フォーマット: 2行目は空行');
+    // パターン1: 〆=25000
+    assertEqual(lines[2], '📌 パターン1 ― 〆: 25000', 'フォーマット: パターン1ヘッダ');
+    assertEqual(lines[3], '  1人目 30000 → 2人目(〆) 25000', 'フォーマット: パターン1の順序');
+    assertEqual(lines[4], '  ⏱ 持ち越し 38秒 ｜ フル持ち越し必要DMG: 85714.3 万', 'フォーマット: パターン1の結果');
+    assertEqual(lines[5], '', 'フォーマット: パターン間の空行');
+    // パターン2: 〆=30000
+    assertEqual(lines[6], '📌 パターン2 ― 〆: 30000', 'フォーマット: パターン2ヘッダ');
+    assertEqual(lines[7], '  1人目 25000 → 2人目(〆) 30000', 'フォーマット: パターン2の順序');
+    assertEqual(lines[8], '  ⏱ 持ち越し 35秒 ｜ フル持ち越し必要DMG: 107142.9 万', 'フォーマット: パターン2の結果');
 }
 
 // --- エッジケース ---
@@ -168,10 +168,12 @@ assertEqual(parseMochiMessage('@mochi abc 30000 25000'), null, 'パース: 数�
     // 〆=25000: rem = 50000-30000-10000 = 10000 → 有効
     // 〆=30000: rem = 50000-25000-10000 = 15000 → 有効
     const lines = output.split('\n');
-    assertEqual(lines[0], '敵の残りHP: 50000', 'エッジ(戦闘無効): 1行目はHP');
-    // 〆=10000の行は「戦闘無効」になる
-    const invalidLine = lines.find(l => l.includes('10000') && l.includes('〆'));
-    assertEqual(invalidLine!.includes('戦闘無効'), true, 'エッジ(戦闘無効): 他ダメージ合計>=HPの組み合わせは戦闘無効');
+    assertEqual(lines[0], '🧮 敵の残りHP: 50000', 'エッジ(戦闘無効): 1行目はHP');
+    // 〆=10000のパターンヘッダを探す
+    const headerIdx = lines.findIndex(l => l.includes('〆: 10000'));
+    assertEqual(headerIdx >= 0, true, 'エッジ(戦闘無効): 〆=10000のパターンが存在');
+    // ヘッダの2行後（結果行）が戦闘無効
+    assertEqual(lines[headerIdx + 2].includes('戦闘無効'), true, 'エッジ(戦闘無効): 他ダメージ合計>=HPの組み合わせは戦闘無効');
 }
 
 // === 単位自動解釈テスト ===

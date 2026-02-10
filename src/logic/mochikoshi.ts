@@ -69,20 +69,21 @@ export function parseMochiMessage(text: string): MochiInput | null {
 
 export function formatMochiResult(bossHp: number, damages: number[]): string {
     const combos = generateAllCombinations(bossHp, damages);
-    const lines: string[] = [`敵の残りHP: ${bossHp}`];
-    for (const combo of combos) {
+    const blocks: string[] = [`🧮 敵の残りHP: ${bossHp}`];
+    combos.forEach((combo, idx) => {
         const parts: string[] = [];
         for (let i = 0; i < combo.otherDamages.length; i++) {
-            parts.push(`${i + 1}人目: ${combo.otherDamages[i]}`);
+            parts.push(`${i + 1}人目 ${combo.otherDamages[i]}`);
         }
-        parts.push(`${combo.otherDamages.length + 1}人目(〆): ${combo.lastDamage}`);
-        const label = parts.join(', ');
+        parts.push(`${combo.otherDamages.length + 1}人目(〆) ${combo.lastDamage}`);
+        const orderLine = parts.join(' → ');
         const remainingHp = bossHp - combo.otherDamages.reduce((sum, d) => sum + d, 0);
+        const header = `📌 パターン${idx + 1} ― 〆: ${combo.lastDamage}`;
         if (remainingHp <= 0) {
-            lines.push(`${label} → 戦闘無効`);
+            blocks.push(`${header}\n  ${orderLine}\n  ⚠ 戦闘無効`);
         } else {
-            lines.push(`${label} の持ち越し秒数は ${combo.carryoverSec} 秒です。フル持ち越し必要DMG: ${combo.fullCarryoverDmg} 万`);
+            blocks.push(`${header}\n  ${orderLine}\n  ⏱ 持ち越し ${combo.carryoverSec}秒 ｜ フル持ち越し必要DMG: ${combo.fullCarryoverDmg} 万`);
         }
-    }
-    return lines.join('\n');
+    });
+    return blocks.join('\n\n');
 }

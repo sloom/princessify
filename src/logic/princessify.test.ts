@@ -1091,4 +1091,28 @@ console.log('\n=== パーティ状態リーク防止テスト ===\n');
     assert(caught !== null, '同一インスタンス2回目: 前回のパーティがリークせずエラーになる');
 }
 
+// === lastMode プロパティテスト ===
+console.log('\n=== lastMode テスト ===');
+{
+    const t = new Princessify();
+
+    // 既存モード: ユーザーがお団子を提供
+    const existingInput = `@dango 甲 乙 丙 丁 戊
+1:13 甲 [〇〇〇〇〇]
+0:55 乙 [〇❌〇〇〇]`;
+    t.convert(existingInput);
+    assert(t.lastMode === 'existing', 'lastMode: 既存モード → "existing"');
+
+    // 推論モード: お団子なし
+    const inferInput = `@dango 甲 乙 丙 丁 戊
+1:13 甲
+0:55 乙`;
+    t.convert(inferInput);
+    assert(t.lastMode === 'inference', 'lastMode: 推論モード → "inference"');
+
+    // 初期値: convert前はnull
+    const t2 = new Princessify();
+    assert(t2.lastMode === null, 'lastMode: 初期値はnull');
+}
+
 console.log('\n=== テスト完了 ===\n');

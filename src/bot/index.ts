@@ -22,6 +22,22 @@ const client = new Client({
 // 変換ツールのインスタンス
 const tool = new Princessify();
 
+// モード別ランダムメッセージ
+const MESSAGES_EXISTING = [
+    '✨ふむ。整えておいたぞ。',
+    '✨色付けしてやったぞ。感謝したまえよ。',
+    '✨うむ。見やすくしておいた。',
+];
+const MESSAGES_INFERENCE = [
+    '✨ふむ。最高のTLだな。',
+    '✨うむ。仕上げてやったぞ。',
+    '✨推論しておいた。完璧だな。',
+];
+function pickMessage(mode: 'inference' | 'existing'): string {
+    const pool = mode === 'inference' ? MESSAGES_INFERENCE : MESSAGES_EXISTING;
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // チャンネルストア（JSONファイルで永続化、.envはシード値）
 const store = new ChannelStore(
     path.join(__dirname, '../../data/channels.json'),
@@ -129,8 +145,9 @@ client.on(Events.MessageCreate, async message => {
                 channelMode: isTargetChannel && !hasDangoTrigger
             });
 
-            // 結果を返信（コードブロックで囲むときれいです）
-            await message.reply(`✨ふむ。最高のTLだな。\n\`\`\`cs\n${result}\n\`\`\``);
+            // 結果を返信（モード別ランダムメッセージ + コードブロック）
+            const greeting = pickMessage(tool.lastMode ?? 'existing');
+            await message.reply(`${greeting}\n\`\`\`cs\n${result}\n\`\`\``);
 
         } catch (error) {
             if (error instanceof PartyGuideError) {

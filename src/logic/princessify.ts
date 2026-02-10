@@ -128,8 +128,11 @@ export interface ConvertOptions {
     channelMode?: boolean;
 }
 
+export type ConvertMode = 'inference' | 'existing';
+
 export class Princessify {
     private party: string[] = [];
+    public lastMode: ConvertMode | null = null;
 
     // 括弧付きお団子を見つける正規表現
     private readonly bracketedDangoRegex = buildBracketedDangoRegex();
@@ -159,6 +162,7 @@ export class Princessify {
         if (!hasAnyUserDango && entries.length > 0 && dangoLineIndex !== -1) {
             if (this.party.length === 5) {
                 // 推論モード: お団子なし + パーティー指定あり
+                this.lastMode = 'inference';
                 return this.inferFromContext(lines, dangoLineIndex);
             }
             // 推論モードを試みたがパーティー未指定 → エラー
@@ -171,6 +175,7 @@ export class Princessify {
         }
 
         // 既存モード: ユーザー指定のお団子がある
+        this.lastMode = 'existing';
         return this.inferAndRender(entries, lines);
     }
 
