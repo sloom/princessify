@@ -2197,4 +2197,74 @@ console.log('\n=== 46. 継続行マージ + 手動指示に🌟 ===');
     assertNotIncludes(line110 ?? '', '🌟', '46b: 名前のみ + 継続行に🌟なし');
 }
 
+// ========================================
+// 47. 裸のon/off: detectAutoState + 🌟抑制 + バトル開始除外
+// ========================================
+console.log('\n=== 47. 裸のon/off対応 ===');
+
+// 47a: detectAutoState — 裸の "off" を認識
+assert(detectAutoState('[〇ー〇〇ー]off') === 'off', '47a: 裸off → off');
+
+// 47b: detectAutoState — 裸の "on" を認識
+assert(detectAutoState('[〇ー〇〇ー]on') === 'on', '47b: 裸on → on');
+
+// 47c: detectAutoState — 大文字もOK
+assert(detectAutoState('[〇ー〇〇ー]OFF') === 'off', '47c: 裸OFF → off');
+assert(detectAutoState('[〇ー〇〇ー]ON') === 'on', '47d: 裸ON → on');
+
+// 47e: detectAutoState — 単語内の on/off には反応しない
+assert(detectAutoState('1:04 offensive attack') === null, '47e: offensive → null');
+assert(detectAutoState('1:04 ongoing battle') === null, '47f: ongoing → null');
+
+// 47g: E2E — [団子]off の行に🌟が付かない + オートOFFが効く
+{
+    const tool = new Princessify();
+    const input = `-dango
+1:30 バトル開始　[〇ー〇〇ー]off
+1:13 ヴルム　　　[〇〇〇〇ー]
+1:04 ユイ　　　　秒数目押し　オートON
+　　　　　　　　[〇〇〇〇ー]on
+0:45 ヴルム　　　[〇〇ーー〇]off
+0:25 ユイ　　　　[〇ー〇〇ー]on`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    // バトル開始に🌟なし
+    const battleStart = lines.find(l => l.includes('1:30') && l.includes('バトル開始'));
+    assertNotIncludes(battleStart ?? '', '🌟', '47g: バトル開始に🌟なし');
+
+    // [団子]off行に🌟なし
+    const vurm045 = lines.find(l => l.includes('0:45') && l.includes('ヴルム'));
+    assertNotIncludes(vurm045 ?? '', '🌟', '47h: [団子]off行に🌟なし');
+
+    // [団子]on行に🌟なし
+    const yui025 = lines.find(l => l.includes('0:25') && l.includes('ユイ'));
+    assertNotIncludes(yui025 ?? '', '🌟', '47i: [団子]on行に🌟なし');
+
+    // 秒数目押し行には🌟あり（これは正しい動作）
+    const yui104 = lines.find(l => l.includes('1:04') && l.includes('ユイ'));
+    assertIncludes(yui104 ?? '', '🌟', '47j: 秒数目押し行には🌟あり');
+
+    // オート状態: 初期OFF→off指示なのでOFF維持(⬛)
+    assertIncludes(battleStart ?? '', '⬛', '47k: バトル開始でオートOFF維持(⬛)');
+
+    // 0:45 ヴルムのoffでオートOFF
+    assertIncludes(vurm045 ?? '', '👉⬛', '47l: 0:45でオートOFF(👉⬛)');
+
+    // 0:25 ユイのonでオートON
+    assertIncludes(yui025 ?? '', '👉✅', '47m: 0:25でオートON(👉✅)');
+}
+
+// 47n: バトル終了にも🌟なし
+{
+    const tool = new Princessify();
+    const input = `-dango
+1:30 バトル開始　[〇ー〇〇ー]
+0:00 バトル終了`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+    const battleEnd = lines.find(l => l.includes('0:00') && l.includes('バトル終了'));
+    assertNotIncludes(battleEnd ?? '', '🌟', '47n: バトル終了に🌟なし');
+}
+
 console.log('\n=== テスト完了 ===\n');

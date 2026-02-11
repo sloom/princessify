@@ -33,10 +33,17 @@ const AUTO_OFF_REGEX = /(?:オート|AUTO)[　 ]*(?:OFF|ＯＦＦ|オフ|おふ|
 // 日本語文中の「切」（例:「見切れ」「大切」）は除外
 const STANDALONE_KIRI_REGEX = /(?:^|[\s!-/:-@[-`{-~！-／：-＠［-｀｛-～'＃])切(?=\s|$)/;
 
+// 独立した「on」「off」の検出（AUTO/オートプレフィックスなし）
+// STANDALONE_KIRI_REGEX と同じ境界条件を使用
+const STANDALONE_ON_REGEX = /(?:^|[\s!-/:-@[-`{-~！-／：-＠［-｀｛-～'＃])on(?=[\s\u3000]|$)/i;
+const STANDALONE_OFF_REGEX = /(?:^|[\s!-/:-@[-`{-~！-／：-＠［-｀｛-～'＃])off(?=[\s\u3000]|$)/i;
+
 export function detectAutoState(text: string): 'on' | 'off' | null {
     if (AUTO_ON_REGEX.test(text)) return 'on';
     if (AUTO_OFF_REGEX.test(text)) return 'off';
     if (STANDALONE_KIRI_REGEX.test(text)) return 'off';
+    if (STANDALONE_ON_REGEX.test(text)) return 'on';
+    if (STANDALONE_OFF_REGEX.test(text)) return 'off';
     return null;
 }
 
@@ -572,7 +579,12 @@ export class Princessify {
                     }
                 } else if (afterTimestamp) {
                     const firstWordEnd = afterTimestamp.search(/[\s\u3000]/);
-                    textAfterActor = firstWordEnd === -1 ? '' : afterTimestamp.substring(firstWordEnd);
+                    const firstWord = firstWordEnd === -1 ? afterTimestamp : afterTimestamp.substring(0, firstWordEnd);
+                    if (firstWord === 'バトル開始' || firstWord === 'バトル終了') {
+                        textAfterActor = '';
+                    } else {
+                        textAfterActor = firstWordEnd === -1 ? '' : afterTimestamp.substring(firstWordEnd);
+                    }
                 }
 
                 const textForCheck = textAfterActor
@@ -580,6 +592,7 @@ export class Princessify {
                     .replace(this.noBracketDangoRegex, '')
                     .replace(AUTO_ON_REGEX, '')
                     .replace(AUTO_OFF_REGEX, '')
+                    .replace(/\b(?:on|off)\b/gi, '')
                     .trim();
 
                 if (textForCheck && classifyUBType(textForCheck, trimmedLine) === 'manual') {
