@@ -1744,4 +1744,61 @@ console.log('\n=== パーティ並び順表示テスト ===');
     assertEqual(firstLine, '[甲/乙/丙/丁/戊]', 'channelMode: 1行目にパーティ並び順');
 }
 
+// === 既存モード: 初期状態行テスト ===
+// テストリスト:
+// [ ] 初期状態行(XXOOO)がタイムスタンプ前にある → 最初のエントリは初期状態との差分
+// [ ] 初期状態行にオートオン指示 → オート状態がONから開始、差分表示も正しい
+// [ ] 括弧付き初期状態行 [XXOOO] → 正しく検出
+// [ ] 初期状態行がない → 従来通りrenderInitialState（回帰テスト）
+console.log('\n=== 既存モード: 初期状態行テスト ===');
+
+// 26. 初期状態行(XXOOO)がタイムスタンプ前にある → 最初のエントリは初期状態との差分
+{
+    const tool = new Princessify();
+    const input = `XXOOO
+
+0:54 甲 OOXOO
+0:51 乙 OOOOO
+`;
+    const result = tool.convert(input)!;
+    // XXOOO=[F,F,T,T,T] → OOXOO=[T,T,F,T,T]: ⭕⭕❌〇〇
+    assertIncludes(result, '[⭕⭕❌〇〇]', '初期状態行: 最初のエントリは初期状態との差分');
+    // OOXOO=[T,T,F,T,T] → OOOOO=[T,T,T,T,T]: 〇〇⭕〇〇
+    assertIncludes(result, '[〇〇⭕〇〇]', '初期状態行: 2番目のエントリも正しい差分');
+}
+
+// 27. 初期状態行にオートオン指示 → オート状態がONから始まる
+{
+    const tool = new Princessify();
+    const input = `XXOOO オートオン
+
+0:54 甲 OOXOO オートオフ
+`;
+    const result = tool.convert(input)!;
+    // Auto: ON→OFF = 👉⬛
+    assertIncludes(result, '[⭕⭕❌〇〇]👉⬛', '初期状態行: お団子とオート(ON→OFF)の両方が正しい');
+}
+
+// 28. 括弧付き初期状態行 [XXOOO] → 正しく検出
+{
+    const tool = new Princessify();
+    const input = `[XXOOO]
+
+0:54 甲 OOXOO
+`;
+    const result = tool.convert(input)!;
+    assertIncludes(result, '[⭕⭕❌〇〇]', '括弧付き初期状態行: 正しく検出');
+}
+
+// 29. 初期状態行がない → 従来通りの動作（回帰テスト）
+{
+    const tool = new Princessify();
+    const input = `0:54 甲 OOXOO
+0:51 乙 OOOOO
+`;
+    const result = tool.convert(input)!;
+    // 初期状態なし、最初のエントリは renderInitialState: OOXOO → [〇〇ー〇〇]
+    assertIncludes(result, '[〇〇ー〇〇]', '初期状態なし: 従来通りrenderInitialState');
+}
+
 console.log('\n=== テスト完了 ===\n');

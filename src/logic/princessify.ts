@@ -378,9 +378,55 @@ export class Princessify {
     private inferAndRender(entries: TimelineEntry[], allLines: string[]): string {
         const resultLines = [...allLines];
 
+        // 初期状態の検出（最初のエントリより前の行からお団子とオート状態を探す）
+        let initialState: DangoState = [false, false, false, false, false];
+        let hasDetectedInitialState = false;
+        let initialAutoState = false;
+        let hasInitialAutoDirective = false;
+
+        if (entries.length > 0) {
+            for (let i = 0; i < entries[0].lineIndex; i++) {
+                const trimmed = allLines[i].trim();
+                if (!trimmed) continue;
+
+                // 括弧付きお団子
+                const bracketMatch = trimmed.match(this.bracketedDangoRegex);
+                if (bracketMatch) {
+                    initialState = this.parseDangoState(bracketMatch[1]);
+                    hasDetectedInitialState = true;
+                } else {
+                    // 括弧なしお団子（行内）
+                    const noBracketMatch = trimmed.match(this.noBracketDangoRegex);
+                    if (noBracketMatch) {
+                        initialState = this.parseDangoState(noBracketMatch[1]);
+                        hasDetectedInitialState = true;
+                    } else {
+                        // 行頭の5文字がすべてお団子文字かチェック
+                        const first5 = trimmed.substring(0, 5);
+                        if (first5.length === 5 &&
+                            [...first5].every(c => ON_CHARS.includes(c) || OFF_CHARS.includes(c)) &&
+                            (trimmed.length === 5 || /[\s　]/.test(trimmed[5]))) {
+                            initialState = this.parseDangoState(first5);
+                            hasDetectedInitialState = true;
+                        }
+                    }
+                }
+
+                // オート状態の検出
+                const autoChange = detectAutoState(trimmed);
+                if (autoChange === 'on') {
+                    initialAutoState = true;
+                    hasInitialAutoDirective = true;
+                } else if (autoChange === 'off') {
+                    initialAutoState = false;
+                    hasInitialAutoDirective = true;
+                }
+            }
+        }
+
         // 条件付き有効化: TL内にオートON/OFF指示が1つ以上あるか
-        const hasAnyAutoDirective = entries.some(e => e.autoStateChange !== null);
-        let prevAutoState = false; // デフォルトOFF
+        const hasAnyAutoDirective = entries.some(e => e.autoStateChange !== null) || hasInitialAutoDirective;
+        let prevAutoState = initialAutoState;
 
         for (let i = 0; i < entries.length; i++) {
             const currentEntry = entries[i];
@@ -388,9 +434,9 @@ export class Princessify {
             const isFirstEntry = (i === 0);
 
             // 前の状態を取得
-            const prevState: DangoState = prevEntry
-                ? prevEntry.userState
-                : [false, false, false, false, false];
+            const prevState: DangoState = isFirstEntry
+                ? [...initialState]
+                : prevEntry!.userState;
 
             // 現在の状態（ユーザー指定があればそれを使う）
             const currentState: DangoState = currentEntry.hasUserDango
@@ -401,8 +447,8 @@ export class Princessify {
             currentEntry.userState = currentState;
 
             // 描画文字列生成
-            // 最初の行は「初期状態」なので差分ではなく状態そのものを表示
-            const dangoStr = isFirstEntry
+            // 初期状態行がある場合は最初の行でも差分表示、ない場合は状態そのものを表示
+            const dangoStr = (isFirstEntry && !hasDetectedInitialState)
                 ? this.renderInitialState(currentState)
                 : this.renderDango(prevState, currentState);
 
