@@ -1563,4 +1563,57 @@ console.log('\n=== channelMode: パーティ行前の無関係行スキップテ
     assert(caught !== null, '無関係行のみ + タイムスタンプ → PartyGuideError');
 }
 
+// === channelMode: インライン命令キーワードを含む5語行のパーティ誤検出防止テスト ===
+// テストリスト:
+// [ ] 「水モネ マホ カスミ リノセット オートオフ」→ パーティ定義として誤検出しない
+// [ ] 「甲セット 乙 丙 丁 戊」→ パーティ定義として誤検出しない
+// [ ] 正常なパーティ行（キーワードなし5語）→ 従来通り検出される
+console.log('\n=== channelMode: キーワード含む5語行の誤検出防止テスト ===');
+
+// 18. キーワード含む5語行がパーティ行より先にある → パーティ定義として誤検出しない
+// 正しいパーティでは「クルル」がSET UB（🌟なし）、誤パーティでは未認識でmanual（🌟あり）
+{
+    const tool = new Princessify();
+    const input = [
+        '水モネ マホ カスミ リノセット オートオフ',  // 5語だがキーワード「セット」「オートオフ」含む → スキップされるべき
+        'マホ カスミ リノ 水モネ クルル',            // 正しいパーティ行
+        '1:20 マホ',
+        '1:10 クルル #通常cl',                      // 正しいパーティ→SET(🌟なし)、誤パーティ→manual(🌟あり)
+    ].join('\n');
+    let result: string | null = null;
+    try {
+        result = tool.convert(input, { channelMode: true });
+    } catch (e) {
+        // パーティ検出失敗で例外が飛んだ場合
+    }
+    assert(result !== null, 'キーワード含む5語行: エラーにならず結果が返る');
+    if (result) {
+        // 正しいパーティ（2行目）が検出され、クルルがSET UBとして認識されている（🌟なし）
+        assertNotIncludes(result, '🌟1:10', 'キーワード含む5語行: クルルがSET UBとして認識（🌟なし）');
+    }
+}
+
+// 19. 先頭語にキーワードが含まれる5語行がパーティ行より先 → スキップされる
+// 誤パーティでは「甲解除」がメンバー名となり「甲」にマッチしない → SET UB未認識
+{
+    const tool = new Princessify();
+    const input = [
+        '甲解除 乙 丙 丁 戊',     // 5語だが「解除」含む → スキップされるべき
+        '甲 乙 丙 丁 戊',          // 正しいパーティ行
+        '1:20 乙',
+        '1:10 甲 #通常cl',         // 正しいパーティ→SET(🌟なし)、誤パーティ→「甲」未認識でmanual(🌟あり)
+    ].join('\n');
+    let result: string | null = null;
+    try {
+        result = tool.convert(input, { channelMode: true });
+    } catch (e) {
+        // パーティ検出失敗で例外が飛んだ場合
+    }
+    assert(result !== null, 'キーワード先頭5語行: エラーにならず結果が返る');
+    if (result) {
+        // 正しいパーティ（2行目）が検出され、「甲」がSET UBとして認識されている（🌟なし）
+        assertNotIncludes(result, '🌟1:10', 'キーワード先頭5語行: 甲がSET UBとして認識（🌟なし）');
+    }
+}
+
 console.log('\n=== テスト完了 ===\n');

@@ -262,7 +262,7 @@ export class Princessify {
                 if (!trimmed) continue; // 空行スキップ
                 if (timeStartRegex.test(trimmed)) continue; // TL行はスキップ
                 const parts = trimmed.split(/\s+/);
-                if (parts.length === 5) {
+                if (parts.length === 5 && !this.hasInlineKeywords(trimmed)) {
                     this.party = parts;
                     return i;
                 }
@@ -271,6 +271,13 @@ export class Princessify {
         }
 
         return -1;
+    }
+
+    /**
+     * インライン命令のキーワードを含むかチェック（パーティ定義候補のフィルタ用）
+     */
+    private hasInlineKeywords(text: string): boolean {
+        return /(?:セット|SET|set|解除|オートオン|オートオフ|AUTO[　 ]*O(?:N|FF))/i.test(text);
     }
 
     /**
