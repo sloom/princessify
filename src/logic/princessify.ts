@@ -432,6 +432,7 @@ export class Princessify {
      */
     private inferAndRender(entries: TimelineEntry[], allLines: string[]): string {
         const resultLines = [...allLines];
+        const linesToRemove = new Set<number>();
 
         // 初期状態の検出（最初のエントリより前の行からお団子とオート状態を探す）
         let initialState: DangoState = [false, false, false, false, false];
@@ -523,8 +524,24 @@ export class Princessify {
             // お団子 + オート絵文字を結合
             const fullDangoStr = dangoStr + autoEmoji;
 
+            // 継続行からAUTOテキストを抽出してタイムスタンプ行に転記
+            const autoTexts: string[] = [];
+            for (const contLine of currentEntry.continuationLines) {
+                const contText = resultLines[contLine];
+                const autoOnMatch = contText.match(AUTO_ON_REGEX);
+                const autoOffMatch = contText.match(AUTO_OFF_REGEX);
+                if (autoOnMatch) autoTexts.push(autoOnMatch[0]);
+                else if (autoOffMatch) autoTexts.push(autoOffMatch[0]);
+                linesToRemove.add(contLine);
+            }
+
             // 元のテキストへの埋め込み
             let newText = currentEntry.originalText;
+
+            // 継続行のAUTOテキストを団子配置前に追記
+            if (autoTexts.length > 0) {
+                newText = `${newText}　${autoTexts.join('　')}`;
+            }
 
             if (this.bracketedDangoRegex.test(newText)) {
                 // 括弧付きお団子がある場合 -> 置換する
@@ -539,14 +556,9 @@ export class Princessify {
 
             // 結果リストの該当行を書き換える
             resultLines[currentEntry.lineIndex] = newText;
-
-            // 継続行を出力から除去
-            for (const contLine of currentEntry.continuationLines) {
-                resultLines[contLine] = '';
-            }
         }
 
-        return resultLines.join('\n');
+        return resultLines.filter((_, idx) => !linesToRemove.has(idx)).join('\n');
     }
 
     /**

@@ -1893,9 +1893,9 @@ console.log('\n=== 34. 複数行団子＋AUTO指示マージ ===');
     // AUTO OFF → ⬛ が1:10行に表示される
     const line110 = lines.find(l => l.includes('1:10') && l.includes('乙'));
     assertIncludes(line110 ?? '', '⬛', '34b: 1:10行にAUTO OFF(⬛)が含まれる');
-    // 継続行が除去される
-    assertNotIncludes(result, 'AUTO ON', '34c: 継続行のAUTO ONが除去される');
-    assertNotIncludes(result, 'AUTO OFF', '34d: 継続行のAUTO OFFが除去される');
+    // 継続行のAUTOテキストがタイムスタンプ行に転記される
+    assertIncludes(line120 ?? '', 'AUTO ON', '34c: AUTO ONテキストが1:20行に転記される');
+    assertIncludes(line110 ?? '', 'AUTO OFF', '34d: AUTO OFFテキストが1:10行に転記される');
 }
 
 // ========================================
@@ -1986,6 +1986,85 @@ console.log('\n=== 37. パーティなし既存モード ===');
         console.error(`❌ FAIL: 37: エラーが発生: ${e instanceof Error ? e.message.split('\n')[0] : e}`);
         process.exitCode = 1;
     }
+}
+
+// ========================================
+// 38. 継続行除去で空行が生じない
+// マージした継続行が完全に除去され、空行として残らない
+// ========================================
+console.log('\n=== 38. 継続行除去で空行が生じない ===');
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲
+【ーーーーー】
+1:10 乙
+【ーーーー◯】
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+    // 1:20甲の行と1:10乙の行は隣接しているべき（間に空行がない）
+    const idx120 = lines.findIndex(l => l.includes('1:20') && l.includes('甲'));
+    const idx110 = lines.findIndex(l => l.includes('1:10') && l.includes('乙'));
+    assertEqual(idx110, idx120 + 1, '38a: 継続行除去後、1:20と1:10の間に空行がない');
+}
+
+// ========================================
+// 39. AUTO入/切テキストがタイムスタンプ行に転記される
+// 継続行のAUTO入/切テキストが消えずにタイムスタンプ行に残る
+// ========================================
+console.log('\n=== 39. AUTO入/切テキストのタイムスタンプ行転記 ===');
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲
+【ーーーーー】　AUTO入
+1:10 乙
+【ーーーー◯】　AUTO切
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+    const line120 = lines.find(l => l.includes('1:20') && l.includes('甲'));
+    const line110 = lines.find(l => l.includes('1:10') && l.includes('乙'));
+    // AUTO入テキストがタイムスタンプ行に転記されている
+    assertIncludes(line120 ?? '', 'AUTO入', '39a: AUTO入が1:20行に転記される');
+    // AUTO切テキストがタイムスタンプ行に転記されている
+    assertIncludes(line110 ?? '', 'AUTO切', '39b: AUTO切が1:10行に転記される');
+    // 継続行が完全に除去されている（空行にならない）
+    const idx120 = lines.findIndex(l => l.includes('1:20') && l.includes('甲'));
+    const idx110 = lines.findIndex(l => l.includes('1:10') && l.includes('乙'));
+    assertEqual(idx110, idx120 + 1, '39c: 継続行除去後、空行がない');
+}
+
+// ========================================
+// 40. 元からある空行は保持される
+// 入力にある空行はそのまま残り、マージ由来の空行だけが消える
+// ========================================
+console.log('\n=== 40. 元からある空行の保持 ===');
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲
+【ーーーーー】
+
+1:10 乙 敵UB
+
+1:00 丙
+【ーーーー◯】
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+    // 1:20と敵UB行の間に空行がある（入力にあった空行）
+    const idx120 = lines.findIndex(l => l.includes('1:20') && l.includes('甲'));
+    const idxEnemy = lines.findIndex(l => l.includes('1:10') && l.includes('乙'));
+    assert(idxEnemy > idx120 + 1, '40a: 元からある空行が保持される');
+    // 1:00丙と次の行の間に空行がない（マージ由来）
+    const idx100 = lines.findIndex(l => l.includes('1:00') && l.includes('丙'));
+    // 1:00丙の直前が空行でないことを確認（マージ由来の空行がない）
+    assert(idx100 === idxEnemy + 2 || idx100 === idxEnemy + 3, '40b: 元の空行のみ保持、マージ空行なし');
 }
 
 console.log('\n=== テスト完了 ===\n');
