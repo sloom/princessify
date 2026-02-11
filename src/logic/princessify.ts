@@ -266,7 +266,7 @@ export class Princessify {
                     this.party = parts;
                     return i;
                 }
-                break; // 5人でない非空行に到達 → パーティ定義なし
+                continue; // 5人でない非空行はスキップして探索を続ける
             }
         }
 

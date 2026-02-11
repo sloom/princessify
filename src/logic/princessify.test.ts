@@ -1489,4 +1489,78 @@ console.log('\n=== auto UBと明示的オート指示の競合テスト ===');
     assertIncludes(line1_07, '👉⬛', '1:07で明示的オートオフ → 👉⬛');
 }
 
+// === channelMode: パーティ行前の無関係行スキップテスト ===
+// テストリスト:
+// [ ] パーティ行の前に無関係な行（1-2語）がある → パーティ検出される
+// [ ] パーティ行の前に複数の無関係な行がある → パーティ検出される
+// [ ] 無関係な行のみ（5語の行なし）→ タイムスタンプあればPartyGuideError
+console.log('\n=== channelMode: パーティ行前の無関係行スキップテスト ===');
+
+// 15. パーティ行の前に1-2語の無関係行がある → パーティ検出される
+{
+    const tool = new Princessify();
+    const input = [
+        '参考tl',
+        'ゆうくん様',
+        'マホ カスミ リノ 水モネ クルル',
+        '水モネ、マホ、カスミ、リノセット　オートオフ',
+        '1:22　水モネub中　水モネ解除',
+        '1:17　カスミub中　クルルセット　オートオン',
+    ].join('\n');
+    let result: string | null = null;
+    try {
+        result = tool.convert(input, { channelMode: true });
+    } catch (e) {
+        // パーティ検出失敗で例外が飛んだ場合
+    }
+    assert(result !== null, 'パーティ前に無関係行: エラーにならず結果が返る');
+    if (result) {
+        // パーティが正しく検出され、推論モードで動作する
+        assertIncludes(result, '1:30 開始', 'パーティ前に無関係行: 初期行が生成される');
+        // パーティ行自体は除去される
+        assertNotIncludes(result, 'マホ カスミ リノ 水モネ クルル', 'パーティ前に無関係行: パーティ行が除去される');
+    }
+}
+
+// 16. パーティ行の前に複数の無関係行 + 空行がある → パーティ検出される
+{
+    const tool = new Princessify();
+    const input = [
+        '参考tl',
+        '',
+        'ゆうくん様',
+        '',
+        'マホ カスミ リノ 水モネ クルル',
+        '1:20 マホ',
+    ].join('\n');
+    let result: string | null = null;
+    try {
+        result = tool.convert(input, { channelMode: true });
+    } catch (e) {
+        // パーティ検出失敗で例外が飛んだ場合
+    }
+    assert(result !== null, '複数無関係行+空行: エラーにならず結果が返る');
+    if (result) {
+        assertIncludes(result, '1:30 開始', '複数無関係行+空行: 初期行が生成される');
+        assertIncludes(result, '🌟1:20 マホ', '複数無関係行+空行: 推論モード動作');
+    }
+}
+
+// 17. 無関係な行のみ（5語の行なし）+ タイムスタンプあり → PartyGuideError
+{
+    const tool = new Princessify();
+    const input = [
+        '参考tl',
+        'ゆうくん様',
+        '1:20 甲 手動発動',
+    ].join('\n');
+    let caught: PartyGuideError | null = null;
+    try {
+        tool.convert(input, { channelMode: true });
+    } catch (e) {
+        if (e instanceof PartyGuideError) caught = e;
+    }
+    assert(caught !== null, '無関係行のみ + タイムスタンプ → PartyGuideError');
+}
+
 console.log('\n=== テスト完了 ===\n');
