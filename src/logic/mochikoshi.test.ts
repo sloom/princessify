@@ -89,32 +89,32 @@ assertEqual(
 );
 
 // --- 全組み合わせ生成 ---
-// 2人: damages=[30000, 25000] → 〆が各人の2通り（入力末尾から順）
+// 2人: damages=[30000, 25000] → 2通り（carryoverSec降順ソート）
 {
     const results = generateAllCombinations(50000, [30000, 25000]);
     assertEqual(results.length, 2, '全組み合わせ(2人): 2通り');
-    // 1番目: others=[30000], 〆=25000, rem=20000, co=38
-    assertEqual(results[0].lastDamage, 25000, '全組み合わせ(2人): 1番目の〆は25000');
+    // 1番目: 〆=25000, participants=[30000], co=38
+    assertEqual(results[0].last.damage, 25000, '全組み合わせ(2人): 1番目の〆は25000');
     assertEqual(results[0].carryoverSec, 38, '全組み合わせ(2人): 1番目は38秒');
     assertEqual(results[0].fullCarryoverDmg, '85714.3', '全組み合わせ(2人): 1番目のフル持ち越しDMG');
-    // 2番目: others=[25000], 〆=30000, rem=25000, co=35
-    assertEqual(results[1].lastDamage, 30000, '全組み合わせ(2人): 2番目の〆は30000');
+    assertEqual(results[0].participants.length, 1, '全組み合わせ(2人): 1番目の参加者1人');
+    assertEqual(results[0].participants[0].damage, 30000, '全組み合わせ(2人): 1番目の参加者30000');
+    assertEqual(results[0].nonParticipants.length, 0, '全組み合わせ(2人): 1番目の不参加者0人');
+    // 2番目: 〆=30000, participants=[25000], co=35
+    assertEqual(results[1].last.damage, 30000, '全組み合わせ(2人): 2番目の〆は30000');
     assertEqual(results[1].carryoverSec, 35, '全組み合わせ(2人): 2番目は35秒');
     assertEqual(results[1].fullCarryoverDmg, '107142.9', '全組み合わせ(2人): 2番目のフル持ち越しDMG');
 }
 
-// 3人: damages=[35000, 30000, 25000] → 3通り
+// 3人: damages=[35000, 30000, 25000] → 全員参加のみ有効（3通り）
 {
     const results = generateAllCombinations(80000, [35000, 30000, 25000]);
     assertEqual(results.length, 3, '全組み合わせ(3人): 3通り');
-    // 〆=25000: others=[35000,30000], rem=15000, co=56
-    assertEqual(results[0].lastDamage, 25000, '全組み合わせ(3人): 1番目の〆は25000');
+    assertEqual(results[0].last.damage, 25000, '全組み合わせ(3人): 1番目の〆は25000');
     assertEqual(results[0].carryoverSec, 56, '全組み合わせ(3人): 1番目は56秒');
-    // 〆=30000: others=[35000,25000], rem=20000, co=50
-    assertEqual(results[1].lastDamage, 30000, '全組み合わせ(3人): 2番目の〆は30000');
+    assertEqual(results[1].last.damage, 30000, '全組み合わせ(3人): 2番目の〆は30000');
     assertEqual(results[1].carryoverSec, 50, '全組み合わせ(3人): 2番目は50秒');
-    // 〆=35000: others=[30000,25000], rem=25000, co=46
-    assertEqual(results[2].lastDamage, 35000, '全組み合わせ(3人): 3番目の〆は35000');
+    assertEqual(results[2].last.damage, 35000, '全組み合わせ(3人): 3番目の〆は35000');
     assertEqual(results[2].carryoverSec, 46, '全組み合わせ(3人): 3番目は46秒');
 }
 
@@ -137,21 +137,23 @@ assertEqual(
 // @mochi を含まない → null
 assertEqual(parseMochiMessage('hello world'), null, 'パース: @mochiなし → null');
 
-// --- 出力フォーマット（案A: パターンヘッダ + 2行構成） ---
+// --- 出力フォーマット（ランキング形式） ---
 {
     const output = formatMochiResult(50000, [30000, 25000]);
     const lines = output.split('\n');
-    assertEqual(lines[0], '👾 敵の残りHP: 50000', 'フォーマット: 1行目はHP（絵文字付き）');
+    assertEqual(lines[0], '👾 敵の残りHP: 50000  (2通り)', 'フォーマット: 1行目はHP＋通り数');
     assertEqual(lines[1], '', 'フォーマット: 2行目は空行');
-    // パターン1: 〆=25000
-    assertEqual(lines[2], '📌 パターン1', 'フォーマット: パターン1ヘッダ');
-    assertEqual(lines[3], '  1人目 30000 → 2人目(〆) 25000', 'フォーマット: パターン1の順序');
-    assertEqual(lines[4], '  ⏰ 持ち越し 38秒 ｜ フル持ち越し必要DMG: 85714.3 万', 'フォーマット: パターン1の結果');
-    assertEqual(lines[5], '', 'フォーマット: パターン間の空行');
-    // パターン2: 〆=30000
-    assertEqual(lines[6], '📌 パターン2', 'フォーマット: パターン2ヘッダ');
-    assertEqual(lines[7], '  1人目 25000 → 2人目(〆) 30000', 'フォーマット: パターン2の順序');
-    assertEqual(lines[8], '  ⏰ 持ち越し 35秒 ｜ フル持ち越し必要DMG: 107142.9 万', 'フォーマット: パターン2の結果');
+    // 1位: 〆=25000
+    assertEqual(lines[2], '📌 1位', 'フォーマット: 1位ヘッダ');
+    assertEqual(lines[3], '  30000 + (〆) 25000', 'フォーマット: 1位の順序');
+    assertEqual(lines[4], '  ⏰ 38秒 ｜ フル持ち越し: 85714.3万', 'フォーマット: 1位の結果');
+    assertEqual(lines[5], '  [2人全員参加]', 'フォーマット: 1位の参加情報');
+    assertEqual(lines[6], '', 'フォーマット: パターン間の空行');
+    // 2位: 〆=30000
+    assertEqual(lines[7], '📌 2位', 'フォーマット: 2位ヘッダ');
+    assertEqual(lines[8], '  25000 + (〆) 30000', 'フォーマット: 2位の順序');
+    assertEqual(lines[9], '  ⏰ 35秒 ｜ フル持ち越し: 107142.9万', 'フォーマット: 2位の結果');
+    assertEqual(lines[10], '  [2人全員参加]', 'フォーマット: 2位の参加情報');
 }
 
 // --- エッジケース ---
@@ -161,19 +163,12 @@ assertEqual(parseMochiMessage('@mochi 50000 30000'), null, 'パース: ダメー
 // 数値以外が混ざっている → パース失敗
 assertEqual(parseMochiMessage('@mochi abc 30000 25000'), null, 'パース: 数値以外 → null');
 
-// 戦闘無効: 他ダメージ合計 >= bossHp → formatで「戦闘無効」
+// 無効パターン除外: 全サブセット列挙により有効な組み合わせのみ表示
 {
     const output = formatMochiResult(50000, [30000, 25000, 10000]);
-    // 〆=10000: rem = 50000-30000-25000 = -5000 → 戦闘無効
-    // 〆=25000: rem = 50000-30000-10000 = 10000 → 有効
-    // 〆=30000: rem = 50000-25000-10000 = 15000 → 有効
-    const lines = output.split('\n');
-    assertEqual(lines[0], '👾 敵の残りHP: 50000', 'エッジ(戦闘無効): 1行目はHP');
-    // 〆=10000の順序行を探す
-    const orderIdx = lines.findIndex(l => l.includes('〆) 10000'));
-    assertEqual(orderIdx >= 0, true, 'エッジ(戦闘無効): 〆=10000のパターンが存在');
-    // 順序行の次行（結果行）が戦闘無効
-    assertEqual(lines[orderIdx + 1].includes('〆メンバーの凸前にボスが倒されます'), true, 'エッジ(戦闘無効): 他ダメージ合計>=HPの組み合わせは無効');
+    // 〆=10000(3人全員)は無効→除外、有効なサブセットのみ表示
+    assertEqual(output.includes('⚠️無効'), false, 'サブセット: 無効パターンは出力に含まれない');
+    assertEqual(output.includes('(4通り)'), true, 'サブセット: 有効な4通りが表示');
 }
 
 // === 単位自動解釈テスト ===
@@ -337,19 +332,19 @@ console.log('\n=== ラベル対応テスト ===');
 // テスト10: generateAllCombinations labels付き
 {
     const results = generateAllCombinations(50000, [30000, 25000], ['Alice', 'Bob']);
-    // 1番目: 〆=Bob(25000), other=[Alice(30000)]
-    assertEqual(results[0].lastLabel, 'Bob', 'combi labels: 1番目の〆ラベル=Bob');
-    assertEqual(results[0].otherLabels[0], 'Alice', 'combi labels: 1番目のotherラベル=Alice');
-    // 2番目: 〆=Alice(30000), other=[Bob(25000)]
-    assertEqual(results[1].lastLabel, 'Alice', 'combi labels: 2番目の〆ラベル=Alice');
-    assertEqual(results[1].otherLabels[0], 'Bob', 'combi labels: 2番目のotherラベル=Bob');
+    // 1番目: 〆=Bob(25000), participants=[Alice(30000)]
+    assertEqual(results[0].last.label, 'Bob', 'combi labels: 1番目の〆ラベル=Bob');
+    assertEqual(results[0].participants[0].label, 'Alice', 'combi labels: 1番目の参加者ラベル=Alice');
+    // 2番目: 〆=Alice(30000), participants=[Bob(25000)]
+    assertEqual(results[1].last.label, 'Alice', 'combi labels: 2番目の〆ラベル=Alice');
+    assertEqual(results[1].participants[0].label, 'Bob', 'combi labels: 2番目の参加者ラベル=Bob');
 }
 
 // テスト11: generateAllCombinations labels省略（後方互換）
 {
     const results = generateAllCombinations(50000, [30000, 25000]);
-    assertEqual(results[0].lastLabel, undefined, 'combi 省略: lastLabel=undefined');
-    assertEqual(results[0].otherLabels[0], undefined, 'combi 省略: otherLabels[0]=undefined');
+    assertEqual(results[0].last.label, undefined, 'combi 省略: last.label=undefined');
+    assertEqual(results[0].participants[0].label, undefined, 'combi 省略: participants[0].label=undefined');
 }
 
 // テスト7: ラベル付きフォーマット
@@ -357,32 +352,32 @@ console.log('\n=== ラベル対応テスト ===');
     const output = formatMochiResult(50000, [30000, 25000], ['Alice', 'Bob']);
     const lines = output.split('\n');
     // ヘッダにラベル〆表示
-    assertEqual(lines[2], '📌 パターン1 ― Bob〆', 'ラベルfmt: パターン1ヘッダにBob〆');
+    assertEqual(lines[2], '📌 1位 ― Bob〆', 'ラベルfmt: 1位ヘッダにBob〆');
     // 順序行にラベル表示
-    assertEqual(lines[3], '  1人目 Alice 30000 → 2人目 Bob(〆) 25000', 'ラベルfmt: パターン1順序');
-    // パターン2
-    assertEqual(lines[6], '📌 パターン2 ― Alice〆', 'ラベルfmt: パターン2ヘッダにAlice〆');
-    assertEqual(lines[7], '  1人目 Bob 25000 → 2人目 Alice(〆) 30000', 'ラベルfmt: パターン2順序');
+    assertEqual(lines[3], '  Alice 30000 + Bob(〆) 25000', 'ラベルfmt: 1位順序');
+    // 2位
+    assertEqual(lines[7], '📌 2位 ― Alice〆', 'ラベルfmt: 2位ヘッダにAlice〆');
+    assertEqual(lines[8], '  Bob 25000 + Alice(〆) 30000', 'ラベルfmt: 2位順序');
 }
 
 // テスト8: ラベルなしフォーマット（後方互換）
 {
     const output = formatMochiResult(50000, [30000, 25000]);
     const lines = output.split('\n');
-    assertEqual(lines[2], '📌 パターン1', 'ラベルなしfmt: パターン1ヘッダ（〆なし）');
-    assertEqual(lines[3], '  1人目 30000 → 2人目(〆) 25000', 'ラベルなしfmt: パターン1順序（現行通り）');
+    assertEqual(lines[2], '📌 1位', 'ラベルなしfmt: 1位ヘッダ（〆なし）');
+    assertEqual(lines[3], '  30000 + (〆) 25000', 'ラベルなしfmt: 1位順序');
 }
 
 // テスト9: 混在ラベルフォーマット
 {
     const output = formatMochiResult(50000, [30000, 25000], ['Alice', undefined]);
     const lines = output.split('\n');
-    // パターン1: 〆=undefinedなのでヘッダに〆なし
-    assertEqual(lines[2], '📌 パターン1', '混在fmt: パターン1ヘッダ（〆ラベルなし）');
-    assertEqual(lines[3], '  1人目 Alice 30000 → 2人目(〆) 25000', '混在fmt: パターン1順序');
-    // パターン2: 〆=Aliceなのでヘッダに〆あり
-    assertEqual(lines[6], '📌 パターン2 ― Alice〆', '混在fmt: パターン2ヘッダにAlice〆');
-    assertEqual(lines[7], '  1人目 25000 → 2人目 Alice(〆) 30000', '混在fmt: パターン2順序');
+    // 1位: 〆=undefinedなのでヘッダに〆なし
+    assertEqual(lines[2], '📌 1位', '混在fmt: 1位ヘッダ（〆ラベルなし）');
+    assertEqual(lines[3], '  Alice 30000 + (〆) 25000', '混在fmt: 1位順序');
+    // 2位: 〆=Aliceなのでヘッダに〆あり
+    assertEqual(lines[7], '📌 2位 ― Alice〆', '混在fmt: 2位ヘッダにAlice〆');
+    assertEqual(lines[8], '  25000 + Alice(〆) 30000', '混在fmt: 2位順序');
 }
 
 // === LABEL:NUMBER 逆順フォーマット対応テスト ===
@@ -419,4 +414,77 @@ console.log('\n=== LABEL:NUMBER 逆順フォーマットテスト ===');
     const parsed = parseMochiMessage('@mochi! 50000 Alice:30000 Bob:25000');
     assertEqual(parsed!.damages[0], 30000, '逆順生モード: damages[0]=30000');
     assertEqual(parsed!.labels[0], 'Alice', '逆順生モード: labels[0]=Alice');
+}
+
+// === サブセット列挙テスト ===
+console.log('\n=== サブセット列挙テスト ===');
+
+// A4: 4人具体例（boss=56000, [30000,28000,17000,5000]）→ 8通り
+{
+    const results = generateAllCombinations(56000, [30000, 28000, 17000, 5000]);
+    assertEqual(results.length, 8, 'A4: 4人入力→8通り');
+    // 1位: co=90, 4人全員, 〆=28000(B), rem=4000
+    assertEqual(results[0].carryoverSec, 90, 'A4: 1位は90秒');
+    assertEqual(results[0].last.damage, 28000, 'A4: 1位の〆は28000');
+    assertEqual(results[0].participants.length, 3, 'A4: 1位の参加者3人');
+    assertEqual(results[0].nonParticipants.length, 0, 'A4: 1位は不参加者なし');
+    // 2位: co=90, 4人全員, 〆=30000(A), rem=6000
+    assertEqual(results[1].carryoverSec, 90, 'A4: 2位も90秒');
+    assertEqual(results[1].last.damage, 30000, 'A4: 2位の〆は30000');
+    // 3位: co=82, 3人{A,B,C}, 〆=28000(B), rem=9000
+    assertEqual(results[2].carryoverSec, 82, 'A4: 3位は82秒');
+    assertEqual(results[2].nonParticipants.length, 1, 'A4: 3位の不参加者1人');
+    assertEqual(results[2].nonParticipants[0].damage, 5000, 'A4: 3位の不参加者はD(5000)');
+    // 8位(最下位): co=26, 2人{A,B}, 〆=30000(A), rem=28000
+    assertEqual(results[7].carryoverSec, 26, 'A4: 8位は26秒');
+    assertEqual(results[7].last.damage, 30000, 'A4: 8位の〆は30000');
+    assertEqual(results[7].participants.length, 1, 'A4: 8位の参加者1人');
+    assertEqual(results[7].nonParticipants.length, 2, 'A4: 8位の不参加者2人');
+}
+
+// A7: 全組み合わせ無効 → 空配列
+{
+    const results = generateAllCombinations(100000, [20000, 10000]);
+    assertEqual(results.length, 0, 'A7: 全無効→空配列');
+}
+
+// === ランキング出力テスト ===
+console.log('\n=== ランキング出力テスト ===');
+
+// B2: 4人入力→不参加者表示
+{
+    const output = formatMochiResult(56000, [30000, 28000, 17000, 5000], ['A', 'B', 'C', 'D']);
+    assertEqual(output.includes('(8通り)'), true, 'B2: 8通り表示');
+    assertEqual(output.includes('📌 1位 ― B〆'), true, 'B2: 1位はB〆');
+    assertEqual(output.includes('[4人全員参加]'), true, 'B2: 全員参加パターンあり');
+    assertEqual(output.includes('⚠️不参加:'), true, 'B2: 不参加者表示あり');
+}
+
+// B5: 10件超→「…他 N 通り」表示
+{
+    const output = formatMochiResult(10000, [9000, 8000, 7000, 6000, 5000]);
+    assertEqual(output.includes('(20通り)'), true, 'B5: 20通り表示');
+    assertEqual(output.includes('…他'), true, 'B5: 省略表示あり');
+}
+
+// B6: 全組み合わせ無効→エラーメッセージ
+{
+    const output = formatMochiResult(100000, [20000, 10000]);
+    assertEqual(output.includes('⚠️ 有効な組み合わせがありません。'), true, 'B6: 全無効メッセージ');
+}
+
+// B7: 11人入力→エラーメッセージ
+assertEqual(
+    formatMochiResult(50000, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+    '⚠️ ダメージの入力は最大10人までです。',
+    'B7: 11人入力はエラー'
+);
+
+// E1: 統合テスト（4人ラベル付きパース→フォーマット）
+{
+    const parsed = parseMochiMessage('@mochi 5.6 3:A 2.8:B 1.7:C 0.5:D');
+    assertEqual(parsed !== null, true, 'E1: パース成功');
+    const output = formatMochiResult(parsed!.bossHp, parsed!.damages, parsed!.labels);
+    assertEqual(output.includes('(8通り)'), true, 'E1: 8通り');
+    assertEqual(output.includes('📌 1位 ― B〆'), true, 'E1: 1位はB〆');
 }
