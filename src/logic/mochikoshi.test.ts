@@ -173,7 +173,7 @@ assertEqual(parseMochiMessage('@mochi abc 30000 25000'), null, 'パース: 数�
     const orderIdx = lines.findIndex(l => l.includes('〆) 10000'));
     assertEqual(orderIdx >= 0, true, 'エッジ(戦闘無効): 〆=10000のパターンが存在');
     // 順序行の次行（結果行）が戦闘無効
-    assertEqual(lines[orderIdx + 1].includes('戦闘無効'), true, 'エッジ(戦闘無効): 他ダメージ合計>=HPの組み合わせは戦闘無効');
+    assertEqual(lines[orderIdx + 1].includes('〆メンバーの凸前にボスが倒されます'), true, 'エッジ(戦闘無効): 他ダメージ合計>=HPの組み合わせは無効');
 }
 
 // === 単位自動解釈テスト ===

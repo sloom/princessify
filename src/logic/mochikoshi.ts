@@ -130,7 +130,7 @@ export function formatMochiResult(bossHp: number, damages: number[], labels?: (s
             ? `📌 パターン${idx + 1} ― ${combo.lastLabel}〆`
             : `📌 パターン${idx + 1}`;
         if (remainingHp <= 0) {
-            blocks.push(`${header}\n  ${orderLine}\n  ⚠ 戦闘無効`);
+            blocks.push(`${header}\n  ${orderLine}\n  ⚠️無効（〆メンバーの凸前にボスが倒されます！）`);
         } else {
             blocks.push(`${header}\n  ${orderLine}\n  ⏰ 持ち越し ${combo.carryoverSec}秒 ｜ フル持ち越し必要DMG: ${combo.fullCarryoverDmg} 万`);
         }
