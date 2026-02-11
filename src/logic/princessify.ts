@@ -244,7 +244,7 @@ export class Princessify {
         // まず @dango / -dango 行を探す（channelMode でも明示指定があれば優先）
         for (let i = 0; i < lines.length; i++) {
             const trimmed = lines[i].trim();
-            const dangoMatch = trimmed.match(/^[@-](?:dango|dan|mo)\b\s*(.*)/);
+            const dangoMatch = trimmed.match(/^[@-](?:dango|dan)\b\s*(.*)/);
             if (dangoMatch) {
                 const parts = dangoMatch[1].trim().split(/\s+/);
                 if (parts.length === 5) {

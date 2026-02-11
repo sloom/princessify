@@ -250,3 +250,31 @@ console.log('\n=== -mochi プレフィックステスト ===');
     assertEqual(parsed!.bossHp, 50000, '-mochi!: 生モード動作');
     assertEqual(parsed!.damages[0], 30000, '-mochi!: damages[0]=30000');
 }
+
+// === @mo / -mo 短縮プレフィックス対応テスト ===
+console.log('\n=== @mo/-mo 短縮プレフィックステスト ===');
+
+// @mo で通常パースが動作する
+{
+    const parsed = parseMochiMessage('@mo 5 3 2.5');
+    assertEqual(parsed!.bossHp, 50000, '@mo: 5 → 50000');
+    assertEqual(parsed!.damages[0], 30000, '@mo: 3 → 30000');
+    assertEqual(parsed!.damages[1], 25000, '@mo: 2.5 → 25000');
+}
+
+// -mo で通常パースが動作する
+{
+    const parsed = parseMochiMessage('-mo 5 3 2.5');
+    assertEqual(parsed!.bossHp, 50000, '-mo: 5 → 50000');
+    assertEqual(parsed!.damages[0], 30000, '-mo: 3 → 30000');
+}
+
+// @mo! で生モードが動作する
+{
+    const parsed = parseMochiMessage('@mo! 50000 30000 25000');
+    assertEqual(parsed!.bossHp, 50000, '@mo!: 生モード動作');
+    assertEqual(parsed!.damages[0], 30000, '@mo!: damages[0]=30000');
+}
+
+// @morning → mochiとして誤検出しない
+assertEqual(parseMochiMessage('@morning 5 3 2.5'), null, '@morning: mochiとして誤検出しない');
