@@ -384,3 +384,39 @@ console.log('\n=== ラベル対応テスト ===');
     assertEqual(lines[6], '📌 パターン2 ― Alice〆', '混在fmt: パターン2ヘッダにAlice〆');
     assertEqual(lines[7], '  1人目 25000 → 2人目 Alice(〆) 30000', '混在fmt: パターン2順序');
 }
+
+// === LABEL:NUMBER 逆順フォーマット対応テスト ===
+console.log('\n=== LABEL:NUMBER 逆順フォーマットテスト ===');
+
+// 逆順: ラベル:数値（Discordメンション風）
+{
+    const parsed = parseMochiMessage('@mochi 5 <@111>:3 <@222>:2.5');
+    assertEqual(parsed!.damages[0], 30000, '逆順メンション: damages[0]=30000');
+    assertEqual(parsed!.damages[1], 25000, '逆順メンション: damages[1]=25000');
+    assertEqual(parsed!.labels[0], '<@111>', '逆順メンション: labels[0]=<@111>');
+    assertEqual(parsed!.labels[1], '<@222>', '逆順メンション: labels[1]=<@222>');
+}
+
+// 逆順: プレーンテキスト
+{
+    const parsed = parseMochiMessage('@mochi 5 Alice:3 Bob:2.5');
+    assertEqual(parsed!.damages[0], 30000, '逆順テキスト: damages[0]=30000');
+    assertEqual(parsed!.labels[0], 'Alice', '逆順テキスト: labels[0]=Alice');
+    assertEqual(parsed!.labels[1], 'Bob', '逆順テキスト: labels[1]=Bob');
+}
+
+// 逆順と正順の混在
+{
+    const parsed = parseMochiMessage('@mochi 5 <@111>:3 2.5:Bob');
+    assertEqual(parsed!.damages[0], 30000, '逆正混在: damages[0]=30000');
+    assertEqual(parsed!.damages[1], 25000, '逆正混在: damages[1]=25000');
+    assertEqual(parsed!.labels[0], '<@111>', '逆正混在: labels[0]=<@111>');
+    assertEqual(parsed!.labels[1], 'Bob', '逆正混在: labels[1]=Bob');
+}
+
+// 逆順 + 生モード
+{
+    const parsed = parseMochiMessage('@mochi! 50000 Alice:30000 Bob:25000');
+    assertEqual(parsed!.damages[0], 30000, '逆順生モード: damages[0]=30000');
+    assertEqual(parsed!.labels[0], 'Alice', '逆順生モード: labels[0]=Alice');
+}

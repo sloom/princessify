@@ -77,12 +77,21 @@ export function parseMochiMessage(text: string): MochiInput | null {
     for (const token of tokens) {
         const colonIdx = token.indexOf(':');
         if (colonIdx !== -1) {
-            const numPart = token.substring(0, colonIdx);
-            const labelPart = token.substring(colonIdx + 1);
-            const num = Number(numPart);
-            if (isNaN(num)) return null;
-            numbers.push(num);
-            labels.push(labelPart || undefined);
+            const left = token.substring(0, colonIdx);
+            const right = token.substring(colonIdx + 1);
+            const leftNum = Number(left);
+            const rightNum = Number(right);
+            if (!isNaN(leftNum) && left !== '') {
+                // NUMBER:LABEL (例: 3:Alice, 3:<@111>)
+                numbers.push(leftNum);
+                labels.push(right || undefined);
+            } else if (!isNaN(rightNum) && right !== '') {
+                // LABEL:NUMBER (例: <@111>:3, Alice:3)
+                numbers.push(rightNum);
+                labels.push(left || undefined);
+            } else {
+                return null;
+            }
         } else {
             const num = Number(token);
             if (isNaN(num)) return null;
