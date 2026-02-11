@@ -554,6 +554,39 @@ export class Princessify {
                 newText = `${newText} ${fullDangoStr}`;
             }
 
+            // 🌟マーカー: 手動目押しUBの検出
+            const trimmedLine = currentEntry.originalText.trim();
+            const isSubLine = trimmedLine.startsWith('(') || trimmedLine.startsWith('（');
+
+            if (!isSubLine) {
+                const timePos = trimmedLine.indexOf(currentEntry.timeStr);
+                const afterTimestamp = trimmedLine
+                    .substring(timePos + currentEntry.timeStr.length)
+                    .replace(/^[\s\u200B\u3000]+/, '');
+
+                let textAfterActor = '';
+                if (currentEntry.actorName) {
+                    const actorPos = afterTimestamp.indexOf(currentEntry.actorName);
+                    if (actorPos !== -1) {
+                        textAfterActor = afterTimestamp.substring(actorPos + currentEntry.actorName.length);
+                    }
+                } else if (afterTimestamp) {
+                    const firstWordEnd = afterTimestamp.search(/[\s\u3000]/);
+                    textAfterActor = firstWordEnd === -1 ? '' : afterTimestamp.substring(firstWordEnd);
+                }
+
+                const textForCheck = textAfterActor
+                    .replace(this.bracketedDangoRegex, '')
+                    .replace(this.noBracketDangoRegex, '')
+                    .replace(AUTO_ON_REGEX, '')
+                    .replace(AUTO_OFF_REGEX, '')
+                    .trim();
+
+                if (textForCheck && classifyUBType(textForCheck, trimmedLine) === 'manual') {
+                    newText = `🌟${newText.trimStart()}`;
+                }
+            }
+
             // 結果リストの該当行を書き換える
             resultLines[currentEntry.lineIndex] = newText;
         }
