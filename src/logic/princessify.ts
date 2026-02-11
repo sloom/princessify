@@ -570,8 +570,7 @@ export class Princessify {
             initialInstructions.setOff.push(...instr.setOff);
             if (instr.autoOn) initialInstructions.autoOn = true;
             if (instr.autoOff) initialInstructions.autoOff = true;
-            // 初期状態行を出力から除去
-            resultLines[i] = '';
+            // 初期状態行は出力に残す（1:30の前に配置される）
         }
 
         // 初期状態を適用
@@ -671,9 +670,9 @@ export class Princessify {
         const initialAutoEmoji = hasAnyAutoUB ? renderAutoState(!initialAutoState, initialAutoState) : '';
         const initialLine = `1:30 開始 ${initialDango}${initialAutoEmoji}`;
 
-        // @dango行を初期行に置き換え
+        // @dango/パーティ行を除去（初期行は後で挿入）
         if (dangoLineIndex !== -1) {
-            resultLines[dangoLineIndex] = initialLine;
+            resultLines[dangoLineIndex] = '';
         }
 
         for (let i = 0; i < entries.length; i++) {
@@ -720,7 +719,13 @@ export class Princessify {
             resultLines[entry.lineIndex] = newText;
         }
 
-        return resultLines.join('\n');
+        // 初期行(1:30 開始)を最初のTLエントリの直前に挿入
+        if (entries.length > 0) {
+            resultLines.splice(entries[0].lineIndex, 0, '', initialLine, '');
+        }
+
+        // 連続空行を圧縮し、前後の空白を除去
+        return resultLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
     }
 
     private buildPartyGuide(): PartyGuideError {
