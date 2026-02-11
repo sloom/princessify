@@ -6,7 +6,7 @@
 // ========================================
 
 // ON状態として認識する文字（丸っぽい表現）
-const ON_CHARS = 'Oo0〇◯⭕';
+const ON_CHARS = 'Oo0○〇◯⭕';
 
 // OFF状態として認識する文字（バツや横棒的な表現）
 // ー(U+30FC):長音, －(U+FF0D):全角ハイフンマイナス, -(U+002D):半角ハイフン, 等
@@ -23,7 +23,7 @@ const CLOSE_BRACKETS = ']］】)）}｝>＞〉》」』〕';
 // ========================================
 
 // オートON検出: 「オート」or「AUTO」+ ON/オン
-const AUTO_ON_REGEX = /(?:オート|AUTO)[　 ]*(?:ON|ＯＮ|オン|おん)/i;
+const AUTO_ON_REGEX = /(?:オート|AUTO)[　 ]*(?:ON|ＯＮ|オン|おん|入り?)/i;
 
 // オートOFF検出: 「オート」or「AUTO」+ OFF/オフ/切
 const AUTO_OFF_REGEX = /(?:オート|AUTO)[　 ]*(?:OFF|ＯＦＦ|オフ|おふ|切り?)/i;
@@ -143,6 +143,7 @@ interface TimelineEntry {
     userState: boolean[];   // ユーザーが指定したお団子状態（あれば）
     hasUserDango: boolean;  // ユーザーがお団子を指定しているか
     autoStateChange: 'on' | 'off' | null;  // オートON/OFF切替指示
+    continuationLines: number[];  // 複数行団子の継続行インデックス
 }
 
 // 5つのスロットの状態（true=SET, false=UNSET）
@@ -204,8 +205,17 @@ export class Princessify {
             lines[dangoLineIndex] = '';
         }
 
+        // 「ユニオンバースト発動時間」マーカーの検出 → TL解析開始位置を決定
+        let tlStartIndex = 0;
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes('ユニオンバースト発動時間')) {
+                tlStartIndex = i + 1;
+                break;
+            }
+        }
+
         // 2. タイムライン解析
-        const entries = this.parseTimeline(lines);
+        const entries = this.parseTimeline(lines, tlStartIndex);
 
         // 3. モード判別
         const hasAnyUserDango = entries.some(e => e.hasUserDango);
@@ -303,11 +313,11 @@ export class Princessify {
         return state.slice(0, 5);
     }
 
-    private parseTimeline(lines: string[]): TimelineEntry[] {
+    private parseTimeline(lines: string[], startIndex: number = 0): TimelineEntry[] {
         const entries: TimelineEntry[] = [];
         const timeRegex = /(\d{1,2}:\d{2})/;
 
-        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        for (let lineIndex = startIndex; lineIndex < lines.length; lineIndex++) {
             const line = lines[lineIndex];
             const trimmed = line.trim();
             const timeMatch = trimmed.match(timeRegex);
@@ -352,10 +362,53 @@ export class Princessify {
             }
 
             // オートON/OFF検出
-            const autoStateChange = detectAutoState(trimmed);
+            let autoStateChange = detectAutoState(trimmed);
 
             // 処理対象の条件: 行頭付近に時間がある OR お団子がある OR キャラ名がある
             if (hasTimeNearStart || hasUserDango || actorIndex !== -1) {
+                // 複数行団子: 次行に団子やAUTO指示がないか先読み
+                const continuationLines: number[] = [];
+                let nextIdx = lineIndex + 1;
+                while (nextIdx < lines.length) {
+                    const nextTrimmed = lines[nextIdx].trim();
+                    if (!nextTrimmed) { nextIdx++; continue; }
+                    if (timeRegex.test(nextTrimmed)) break;
+
+                    let isContinuation = false;
+
+                    // 括弧付き団子チェック
+                    const contBracket = nextTrimmed.match(this.bracketedDangoRegex);
+                    if (contBracket) {
+                        userState = this.parseDangoState(contBracket[1]);
+                        hasUserDango = true;
+                        isContinuation = true;
+                    } else {
+                        // 括弧なし団子チェック
+                        const contNoBracket = nextTrimmed.match(this.noBracketDangoRegex);
+                        if (contNoBracket) {
+                            userState = this.parseDangoState(contNoBracket[1]);
+                            hasUserDango = true;
+                            isContinuation = true;
+                        }
+                    }
+
+                    // AUTO指示チェック
+                    const contAuto = detectAutoState(nextTrimmed);
+                    if (contAuto) {
+                        if (autoStateChange === null) {
+                            autoStateChange = contAuto;
+                        }
+                        isContinuation = true;
+                    }
+
+                    if (isContinuation) {
+                        continuationLines.push(nextIdx);
+                        nextIdx++;
+                    } else {
+                        break;
+                    }
+                }
+
                 entries.push({
                     lineIndex,
                     originalText: line,
@@ -364,8 +417,10 @@ export class Princessify {
                     actorName,
                     userState,
                     hasUserDango,
-                    autoStateChange
+                    autoStateChange,
+                    continuationLines
                 });
+                lineIndex = nextIdx - 1;
             }
         }
         return entries;
@@ -484,6 +539,11 @@ export class Princessify {
 
             // 結果リストの該当行を書き換える
             resultLines[currentEntry.lineIndex] = newText;
+
+            // 継続行を出力から除去
+            for (const contLine of currentEntry.continuationLines) {
+                resultLines[contLine] = '';
+            }
         }
 
         return resultLines.join('\n');

@@ -382,6 +382,9 @@ assertEqual(detectAutoState('auto on'), 'on', 'auto on → on');
 assertEqual(detectAutoState('auto off'), 'off', 'auto off → off');
 assertEqual(detectAutoState('オート切'), 'off', 'オート切 → off');
 assertEqual(detectAutoState('オート切り'), 'off', 'オート切り → off');
+assertEqual(detectAutoState('AUTO入'), 'on', 'AUTO入 → on');
+assertEqual(detectAutoState('AUTO入り'), 'on', 'AUTO入り → on');
+assertEqual(detectAutoState('オート入'), 'on', 'オート入 → on');
 
 console.log('\n=== オート検出: 独立した「切」テスト ===\n');
 
@@ -1839,6 +1842,150 @@ console.log('\n=== @dan プレフィックステスト ===');
 `;
     const result = tool.convert(input)!;
     assertIncludes(result, '@mo', '@mo: dangoトリガーとして誤検出しない');
+}
+
+// ========================================
+// 33. 複数行団子マージ（基本）
+// タイムスタンプ行の次行に団子がある場合、色付け団子がタイムスタンプ行に表示されること
+// ========================================
+console.log('\n=== 33. 複数行団子マージ（基本） ===');
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲
+【ーーーーー】
+1:10 乙
+【ーーーー◯】
+`;
+    const result = tool.convert(input)!;
+    // 1:20 甲 の行に色付け団子が含まれること
+    const lines = result.split('\n');
+    const line120 = lines.find(l => l.includes('1:20') && l.includes('甲'));
+    assertIncludes(line120 ?? '', 'ー', '33a: 1:20行に団子文字が含まれる');
+    // 継続行の生団子【ーーーーー】が出力から除去されること
+    assertNotIncludes(result, '【ーーーーー】', '33b: 継続行の生団子が除去される');
+    // 1:10 乙 の行に色付け団子が含まれること
+    const line110 = lines.find(l => l.includes('1:10') && l.includes('乙'));
+    assertIncludes(line110 ?? '', '⭕', '33c: 1:10行にOFF→ONの差分(⭕)が含まれる');
+    assertNotIncludes(result, '【ーーーー◯】', '33d: 継続行の生団子が除去される');
+}
+
+// ========================================
+// 34. 複数行団子＋AUTO指示マージ
+// 次行に 【ーーーーー】AUTO入 がある場合、団子とAUTO状態の両方がマージされること
+// ========================================
+console.log('\n=== 34. 複数行団子＋AUTO指示マージ ===');
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲
+【ーーーーー】　AUTO ON
+1:10 乙
+【ーーーー◯】　AUTO OFF
+`;
+    const result = tool.convert(input)!;
+    // AUTO ON → ✅ が1:20行に表示される
+    const lines = result.split('\n');
+    const line120 = lines.find(l => l.includes('1:20') && l.includes('甲'));
+    assertIncludes(line120 ?? '', '✅', '34a: 1:20行にAUTO ON(✅)が含まれる');
+    // AUTO OFF → ⬛ が1:10行に表示される
+    const line110 = lines.find(l => l.includes('1:10') && l.includes('乙'));
+    assertIncludes(line110 ?? '', '⬛', '34b: 1:10行にAUTO OFF(⬛)が含まれる');
+    // 継続行が除去される
+    assertNotIncludes(result, 'AUTO ON', '34c: 継続行のAUTO ONが除去される');
+    assertNotIncludes(result, 'AUTO OFF', '34d: 継続行のAUTO OFFが除去される');
+}
+
+// ========================================
+// 35. プリアンブルスキップ（channelMode）
+// 「◆ユニオンバースト発動時間」以前をTL解析対象から除外し、出力にはそのまま残すこと
+// ========================================
+console.log('\n=== 35. プリアンブルスキップ（channelMode） ===');
+{
+    const tool = new Princessify();
+    const input = `TL参考:Ark様
+MS…117
+----
+◆パーティ編成
+ジータ ★5 Lv367 RANK39
+ミソラ ★5 Lv367 RANK39
+----
+◆ユニオンバースト発動時間
+1:20 甲
+【ーーーーー】
+1:10 乙
+【ーーーー◯】
+`;
+    try {
+        const result = tool.convert(input, { channelMode: true })!;
+        // プリアンブルが出力に残っている
+        assertIncludes(result, 'TL参考:Ark様', '35a: プリアンブルが出力に残る');
+        assertIncludes(result, '◆パーティ編成', '35b: パーティ編成行が出力に残る');
+        assertIncludes(result, '◆ユニオンバースト発動時間', '35c: マーカー行が出力に残る');
+        // TL部分は色付けされている（エラーにならない）
+        assert(result !== null, '35d: エラーにならずに結果を返す');
+        // 継続行の生団子は除去される
+        assertNotIncludes(result, '【ーーーーー】', '35e: 継続行の生団子が除去される');
+    } catch (e) {
+        console.error(`❌ FAIL: 35: エラーが発生: ${e instanceof Error ? e.message.split('\n')[0] : e}`);
+        process.exitCode = 1;
+    }
+}
+
+// ========================================
+// 36. 同行団子と複数行団子の混在
+// 一部は同行に団子あり、一部は次行 → 両方正しく処理されること
+// ========================================
+console.log('\n=== 36. 同行団子と複数行団子の混在 ===');
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲
+【ーーーーー】
+1:10 乙 【ーーーー◯】
+1:00 丙
+【ーーー◯◯】
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+    // 1:20 甲 → 複数行団子（マージ）
+    const line120 = lines.find(l => l.includes('1:20') && l.includes('甲'));
+    assertIncludes(line120 ?? '', 'ー', '36a: 1:20行に団子が含まれる（マージ）');
+    // 1:10 乙 → 同行団子（既存動作）
+    const line110 = lines.find(l => l.includes('1:10') && l.includes('乙'));
+    assertIncludes(line110 ?? '', '⭕', '36b: 1:10行にOFF→ON差分が含まれる（同行）');
+    // 1:00 丙 → 複数行団子（マージ）
+    const line100 = lines.find(l => l.includes('1:00') && l.includes('丙'));
+    assertIncludes(line100 ?? '', '⭕', '36c: 1:00行にOFF→ON差分が含まれる（マージ）');
+}
+
+// ========================================
+// 37. パーティなし既存モード（channelMode）
+// channelModeで団子ありパーティなし → エラーにならず色付け動作
+// ========================================
+console.log('\n=== 37. パーティなし既存モード ===');
+{
+    const tool = new Princessify();
+    const input = `1:20 甲
+【ーーーーー】
+1:10 乙
+【ーーーー◯】
+`;
+    try {
+        const result = tool.convert(input, { channelMode: true })!;
+        // エラーにならない
+        assert(result !== null, '37a: パーティなしでもエラーにならない');
+        // 色付けされている
+        const lines = result.split('\n');
+        const line120 = lines.find(l => l.includes('1:20'));
+        assertIncludes(line120 ?? '', 'ー', '37b: 1:20行に団子が含まれる');
+    } catch (e) {
+        console.error(`❌ FAIL: 37: エラーが発生: ${e instanceof Error ? e.message.split('\n')[0] : e}`);
+        process.exitCode = 1;
+    }
 }
 
 console.log('\n=== テスト完了 ===\n');
