@@ -582,6 +582,12 @@ export class Princessify {
             || entries.some(e => e.inlineInstructions.autoOn || e.inlineInstructions.autoOff)
             || initialInstructions.autoOn || initialInstructions.autoOff;
 
+        // 明示的なオートON/OFF指示があるか（インライン命令 or 初期状態行）
+        // ある場合、auto UBからの自動推論（autoOn/Off需要追加）をスキップする
+        const hasExplicitAutoInstructions =
+            entries.some(e => e.inlineInstructions.autoOn || e.inlineInstructions.autoOff)
+            || initialInstructions.autoOn || initialInstructions.autoOff;
+
         // SET需要の計算
         interface Demands {
             setOn: number[];
@@ -611,7 +617,8 @@ export class Princessify {
             }
 
             // AUTO発動UB → 直前にAUTO ON、発動行でAUTO OFF
-            if (entry.ubType === 'auto') {
+            // （明示的なオートON/OFF指示がTLにある場合はスキップ: ユーザーの指示が優先）
+            if (entry.ubType === 'auto' && !hasExplicitAutoInstructions) {
                 if (i > 0) {
                     getDemands(i - 1).autoOn = true;
                 }
