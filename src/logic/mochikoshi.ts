@@ -179,7 +179,7 @@ function renderCombos(
             ? `${combo.last.label}(〆) ${combo.last.damage}`
             : `(〆) ${combo.last.damage}`;
         parts.push(lastPart);
-        const orderLine = parts.join(' + ');
+        const orderLine = parts.join(' → ');
 
         const header = combo.last.label
             ? `📌 ${idx + 1}位 ― ${combo.last.label}〆`
@@ -198,8 +198,7 @@ function renderCombos(
         blocks.push(
             `${header}\n` +
             `  ${orderLine}\n` +
-            `  ⏰ ${combo.carryoverSec}秒 ｜ フル持ち越し: ${combo.fullCarryoverDmg}万\n` +
-            `  ${participationInfo}`
+            `  ⏰ ${combo.carryoverSec}秒 ｜ ⚡${combo.fullCarryoverDmg}万 ｜ ${participationInfo}`
         );
     });
 
