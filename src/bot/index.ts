@@ -134,7 +134,7 @@ client.on(Events.MessageCreate, async message => {
     }
 
     const isTargetChannel = store.has(message.channelId);
-    const hasDangoTrigger = /[@-]dango/.test(message.content);
+    const hasDangoTrigger = /[@-](?:dango|dan|mo)\b/.test(message.content);
 
     if (isTargetChannel || hasDangoTrigger) {
         try {

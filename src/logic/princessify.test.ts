@@ -1801,4 +1801,81 @@ console.log('\n=== 既存モード: 初期状態行テスト ===');
     assertIncludes(result, '[〇〇ー〇〇]', '初期状態なし: 従来通りrenderInitialState');
 }
 
+// === @mo / -mo プレフィックス対応テスト ===
+// テストリスト:
+// [ ] @mo + パーティ5人 → 推論モードで動作
+// [ ] -mo + パーティ5人 → 推論モードで動作
+// [ ] @mo パーティなし → トリガーとして認識（エラー）
+// [ ] @morning など → トリガーとして誤検出しない
+console.log('\n=== @mo プレフィックステスト ===');
+
+// 30. @mo + パーティ5人 → 推論モードで動作
+{
+    const tool = new Princessify();
+    const input = `@mo 甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+1:10 乙 #通常cl
+`;
+    const result = tool.convert(input)!;
+    assertIncludes(result, '🌟', '@mo: 推論モードで動作');
+    assertEqual(tool.lastMode, 'inference', '@mo: lastModeがinference');
+}
+
+// 31. -mo + パーティ5人 → 推論モードで動作
+{
+    const tool = new Princessify();
+    const input = `-mo 甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+`;
+    const result = tool.convert(input)!;
+    assertIncludes(result, '🌟', '-mo: 推論モードで動作');
+}
+
+// 32. @mo パーティなし → トリガーとして認識（PartyGuideError）
+{
+    const tool = new Princessify();
+    let threw = false;
+    try {
+        tool.convert(`@mo\n\n1:20 誰か 手動発動`);
+    } catch (e) {
+        if (e instanceof PartyGuideError) threw = true;
+    }
+    assert(threw, '@mo: パーティなしでPartyGuideError');
+}
+
+// 33. @morning → トリガーとして誤検出しない（既存モードで処理）
+{
+    const tool = new Princessify();
+    const input = `@morning みんなおはよう
+
+1:20 甲 OOOOO
+`;
+    const result = tool.convert(input)!;
+    assertIncludes(result, '@morning', '@morning: トリガーとして誤検出しない');
+}
+
+// 34. @dan + パーティ5人 → 推論モードで動作
+{
+    const tool = new Princessify();
+    const input = `@dan 甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+`;
+    const result = tool.convert(input)!;
+    assertIncludes(result, '🌟', '@dan: 推論モードで動作');
+}
+
+// 35. @danger → トリガーとして誤検出しない
+{
+    const tool = new Princessify();
+    const input = `@danger 注意
+
+1:20 甲 OOOOO
+`;
+    const result = tool.convert(input)!;
+    assertIncludes(result, '@danger', '@danger: トリガーとして誤検出しない');
+}
+
 console.log('\n=== テスト完了 ===\n');
