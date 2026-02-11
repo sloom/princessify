@@ -141,17 +141,17 @@ assertEqual(parseMochiMessage('hello world'), null, 'パース: @mochiなし →
 {
     const output = formatMochiResult(50000, [30000, 25000]);
     const lines = output.split('\n');
-    assertEqual(lines[0], '🧮 敵の残りHP: 50000', 'フォーマット: 1行目はHP（絵文字付き）');
+    assertEqual(lines[0], '👾 敵の残りHP: 50000', 'フォーマット: 1行目はHP（絵文字付き）');
     assertEqual(lines[1], '', 'フォーマット: 2行目は空行');
     // パターン1: 〆=25000
-    assertEqual(lines[2], '📌 パターン1 ― 〆: 25000', 'フォーマット: パターン1ヘッダ');
+    assertEqual(lines[2], '📌 パターン1', 'フォーマット: パターン1ヘッダ');
     assertEqual(lines[3], '  1人目 30000 → 2人目(〆) 25000', 'フォーマット: パターン1の順序');
-    assertEqual(lines[4], '  ⏱ 持ち越し 38秒 ｜ フル持ち越し必要DMG: 85714.3 万', 'フォーマット: パターン1の結果');
+    assertEqual(lines[4], '  ⏰ 持ち越し 38秒 ｜ フル持ち越し必要DMG: 85714.3 万', 'フォーマット: パターン1の結果');
     assertEqual(lines[5], '', 'フォーマット: パターン間の空行');
     // パターン2: 〆=30000
-    assertEqual(lines[6], '📌 パターン2 ― 〆: 30000', 'フォーマット: パターン2ヘッダ');
+    assertEqual(lines[6], '📌 パターン2', 'フォーマット: パターン2ヘッダ');
     assertEqual(lines[7], '  1人目 25000 → 2人目(〆) 30000', 'フォーマット: パターン2の順序');
-    assertEqual(lines[8], '  ⏱ 持ち越し 35秒 ｜ フル持ち越し必要DMG: 107142.9 万', 'フォーマット: パターン2の結果');
+    assertEqual(lines[8], '  ⏰ 持ち越し 35秒 ｜ フル持ち越し必要DMG: 107142.9 万', 'フォーマット: パターン2の結果');
 }
 
 // --- エッジケース ---
@@ -168,12 +168,12 @@ assertEqual(parseMochiMessage('@mochi abc 30000 25000'), null, 'パース: 数�
     // 〆=25000: rem = 50000-30000-10000 = 10000 → 有効
     // 〆=30000: rem = 50000-25000-10000 = 15000 → 有効
     const lines = output.split('\n');
-    assertEqual(lines[0], '🧮 敵の残りHP: 50000', 'エッジ(戦闘無効): 1行目はHP');
-    // 〆=10000のパターンヘッダを探す
-    const headerIdx = lines.findIndex(l => l.includes('〆: 10000'));
-    assertEqual(headerIdx >= 0, true, 'エッジ(戦闘無効): 〆=10000のパターンが存在');
-    // ヘッダの2行後（結果行）が戦闘無効
-    assertEqual(lines[headerIdx + 2].includes('戦闘無効'), true, 'エッジ(戦闘無効): 他ダメージ合計>=HPの組み合わせは戦闘無効');
+    assertEqual(lines[0], '👾 敵の残りHP: 50000', 'エッジ(戦闘無効): 1行目はHP');
+    // 〆=10000の順序行を探す
+    const orderIdx = lines.findIndex(l => l.includes('〆) 10000'));
+    assertEqual(orderIdx >= 0, true, 'エッジ(戦闘無効): 〆=10000のパターンが存在');
+    // 順序行の次行（結果行）が戦闘無効
+    assertEqual(lines[orderIdx + 1].includes('戦闘無効'), true, 'エッジ(戦闘無効): 他ダメージ合計>=HPの組み合わせは戦闘無効');
 }
 
 // === 単位自動解釈テスト ===
@@ -278,3 +278,109 @@ console.log('\n=== @mo/-mo 短縮プレフィックステスト ===');
 
 // @morning → mochiとして誤検出しない
 assertEqual(parseMochiMessage('@morning 5 3 2.5'), null, '@morning: mochiとして誤検出しない');
+
+// === ラベル対応テスト ===
+console.log('\n=== ラベル対応テスト ===');
+
+// テスト1: ラベル付きパース
+{
+    const parsed = parseMochiMessage('@mochi 5 3:Alice 2.5:Bob');
+    assertEqual(parsed!.bossHp, 50000, 'ラベル付き: bossHp=50000');
+    assertEqual(parsed!.damages[0], 30000, 'ラベル付き: damages[0]=30000');
+    assertEqual(parsed!.damages[1], 25000, 'ラベル付き: damages[1]=25000');
+    assertEqual(parsed!.labels[0], 'Alice', 'ラベル付き: labels[0]=Alice');
+    assertEqual(parsed!.labels[1], 'Bob', 'ラベル付き: labels[1]=Bob');
+}
+
+// テスト2: 混在（一部のみラベル）
+{
+    const parsed = parseMochiMessage('@mochi 5 3:Alice 2.5');
+    assertEqual(parsed!.damages[0], 30000, '混在: damages[0]=30000');
+    assertEqual(parsed!.damages[1], 25000, '混在: damages[1]=25000');
+    assertEqual(parsed!.labels[0], 'Alice', '混在: labels[0]=Alice');
+    assertEqual(parsed!.labels[1], undefined, '混在: labels[1]=undefined');
+}
+
+// テスト3: ラベルなし（後方互換）
+{
+    const parsed = parseMochiMessage('@mochi 5 3 2.5');
+    assertEqual(parsed!.labels[0], undefined, '後方互換: labels[0]=undefined');
+    assertEqual(parsed!.labels[1], undefined, '後方互換: labels[1]=undefined');
+}
+
+// テスト4: Discordメンション風
+{
+    const parsed = parseMochiMessage('@mochi 5 3:<@111> 2.5:<@222>');
+    assertEqual(parsed!.damages[0], 30000, 'メンション: damages[0]=30000');
+    assertEqual(parsed!.labels[0], '<@111>', 'メンション: labels[0]=<@111>');
+    assertEqual(parsed!.labels[1], '<@222>', 'メンション: labels[1]=<@222>');
+}
+
+// テスト5: 生モード+ラベル
+{
+    const parsed = parseMochiMessage('@mochi! 50000 30000:Alice 25000:Bob');
+    assertEqual(parsed!.bossHp, 50000, '生モード+ラベル: bossHp=50000');
+    assertEqual(parsed!.damages[0], 30000, '生モード+ラベル: damages[0]=30000（変換なし）');
+    assertEqual(parsed!.labels[0], 'Alice', '生モード+ラベル: labels[0]=Alice');
+    assertEqual(parsed!.labels[1], 'Bob', '生モード+ラベル: labels[1]=Bob');
+}
+
+// テスト6: 3人+ラベル
+{
+    const parsed = parseMochiMessage('@mochi 8 3.5:甲 3:乙 2.5:丙');
+    assertEqual(parsed!.damages.length, 3, '3人ラベル: damages 3個');
+    assertEqual(parsed!.labels[0], '甲', '3人ラベル: labels[0]=甲');
+    assertEqual(parsed!.labels[1], '乙', '3人ラベル: labels[1]=乙');
+    assertEqual(parsed!.labels[2], '丙', '3人ラベル: labels[2]=丙');
+}
+
+// テスト10: generateAllCombinations labels付き
+{
+    const results = generateAllCombinations(50000, [30000, 25000], ['Alice', 'Bob']);
+    // 1番目: 〆=Bob(25000), other=[Alice(30000)]
+    assertEqual(results[0].lastLabel, 'Bob', 'combi labels: 1番目の〆ラベル=Bob');
+    assertEqual(results[0].otherLabels[0], 'Alice', 'combi labels: 1番目のotherラベル=Alice');
+    // 2番目: 〆=Alice(30000), other=[Bob(25000)]
+    assertEqual(results[1].lastLabel, 'Alice', 'combi labels: 2番目の〆ラベル=Alice');
+    assertEqual(results[1].otherLabels[0], 'Bob', 'combi labels: 2番目のotherラベル=Bob');
+}
+
+// テスト11: generateAllCombinations labels省略（後方互換）
+{
+    const results = generateAllCombinations(50000, [30000, 25000]);
+    assertEqual(results[0].lastLabel, undefined, 'combi 省略: lastLabel=undefined');
+    assertEqual(results[0].otherLabels[0], undefined, 'combi 省略: otherLabels[0]=undefined');
+}
+
+// テスト7: ラベル付きフォーマット
+{
+    const output = formatMochiResult(50000, [30000, 25000], ['Alice', 'Bob']);
+    const lines = output.split('\n');
+    // ヘッダにラベル〆表示
+    assertEqual(lines[2], '📌 パターン1 ― Bob〆', 'ラベルfmt: パターン1ヘッダにBob〆');
+    // 順序行にラベル表示
+    assertEqual(lines[3], '  1人目 Alice 30000 → 2人目 Bob(〆) 25000', 'ラベルfmt: パターン1順序');
+    // パターン2
+    assertEqual(lines[6], '📌 パターン2 ― Alice〆', 'ラベルfmt: パターン2ヘッダにAlice〆');
+    assertEqual(lines[7], '  1人目 Bob 25000 → 2人目 Alice(〆) 30000', 'ラベルfmt: パターン2順序');
+}
+
+// テスト8: ラベルなしフォーマット（後方互換）
+{
+    const output = formatMochiResult(50000, [30000, 25000]);
+    const lines = output.split('\n');
+    assertEqual(lines[2], '📌 パターン1', 'ラベルなしfmt: パターン1ヘッダ（〆なし）');
+    assertEqual(lines[3], '  1人目 30000 → 2人目(〆) 25000', 'ラベルなしfmt: パターン1順序（現行通り）');
+}
+
+// テスト9: 混在ラベルフォーマット
+{
+    const output = formatMochiResult(50000, [30000, 25000], ['Alice', undefined]);
+    const lines = output.split('\n');
+    // パターン1: 〆=undefinedなのでヘッダに〆なし
+    assertEqual(lines[2], '📌 パターン1', '混在fmt: パターン1ヘッダ（〆ラベルなし）');
+    assertEqual(lines[3], '  1人目 Alice 30000 → 2人目(〆) 25000', '混在fmt: パターン1順序');
+    // パターン2: 〆=Aliceなのでヘッダに〆あり
+    assertEqual(lines[6], '📌 パターン2 ― Alice〆', '混在fmt: パターン2ヘッダにAlice〆');
+    assertEqual(lines[7], '  1人目 25000 → 2人目 Alice(〆) 30000', '混在fmt: パターン2順序');
+}
