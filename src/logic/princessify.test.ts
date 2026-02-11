@@ -1685,4 +1685,63 @@ console.log('\n=== 初期行配置と空行整理テスト ===');
     assert(lines[0].trim() !== '', '非channelMode: 先頭が空行でない');
 }
 
+// === パーティ並び順表示テスト ===
+// テストリスト:
+// [ ] 推論モード（@dango + 5人）: 出力の1行目が [キャラ1/キャラ2/キャラ3/キャラ4/キャラ5]
+// [ ] 既存モード（@dango + 5人 + お団子あり）: 出力の1行目が同形式
+// [ ] 既存モード（パーティ未指定 + お団子あり）: パーティ行なし
+// [ ] channelMode: 出力の1行目が同形式
+console.log('\n=== パーティ並び順表示テスト ===');
+
+// 22. 推論モード: 出力の1行目がパーティ並び順
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+1:10 乙 #通常cl
+`;
+    const result = tool.convert(input)!;
+    const firstLine = result.split('\n')[0];
+    assertEqual(firstLine, '[甲/乙/丙/丁/戊]', '推論モード: 1行目にパーティ並び順');
+}
+
+// 23. 既存モード（パーティ5人 + お団子あり）: 出力の1行目がパーティ並び順
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:30 開始 [〇〇〇〇〇]
+1:20 甲 [〇〇❌❌❌]
+`;
+    const result = tool.convert(input)!;
+    const firstLine = result.split('\n')[0];
+    assertEqual(firstLine, '[甲/乙/丙/丁/戊]', '既存モード（パーティあり）: 1行目にパーティ並び順');
+}
+
+// 24. 既存モード（パーティ未指定 + お団子あり）: パーティ行なし
+{
+    const tool = new Princessify();
+    const input = `@dango
+
+1:30 開始 [〇〇〇〇〇]
+1:20 A [〇〇❌❌❌]
+`;
+    const result = tool.convert(input)!;
+    assertNotIncludes(result, '[/', '既存モード（パーティなし）: パーティ行なし');
+}
+
+// 25. channelMode: 出力の1行目がパーティ並び順
+{
+    const tool = new Princessify();
+    const input = `甲 乙 丙 丁 戊
+
+1:20 甲 手動発動
+1:10 乙 #通常cl
+`;
+    const result = tool.convert(input, { channelMode: true })!;
+    const firstLine = result.split('\n')[0];
+    assertEqual(firstLine, '[甲/乙/丙/丁/戊]', 'channelMode: 1行目にパーティ並び順');
+}
+
 console.log('\n=== テスト完了 ===\n');

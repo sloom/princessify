@@ -219,7 +219,7 @@ export class Princessify {
             if (this.party.length === 5) {
                 // 推論モード: お団子なし + パーティー指定あり
                 this.lastMode = 'inference';
-                return this.inferFromContext(lines, dangoLineIndex);
+                return this.prependPartyHeader(this.inferFromContext(lines, dangoLineIndex));
             }
             // 推論モードを試みたがパーティー未指定 → エラー
             throw this.buildPartyGuide();
@@ -237,7 +237,7 @@ export class Princessify {
 
         // 既存モード: ユーザー指定のお団子がある
         this.lastMode = 'existing';
-        return this.inferAndRender(entries, lines);
+        return this.prependPartyHeader(this.inferAndRender(entries, lines));
     }
 
     private parseHeader(lines: string[], channelMode: boolean = false): number {
@@ -726,6 +726,13 @@ export class Princessify {
 
         // 連続空行を圧縮し、前後の空白を除去
         return resultLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    private prependPartyHeader(result: string): string {
+        if (this.party.length === 5) {
+            return `[${this.party.join('/')}]\n${result}`;
+        }
+        return result;
     }
 
     private buildPartyGuide(): PartyGuideError {
