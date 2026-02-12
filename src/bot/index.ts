@@ -24,14 +24,13 @@ const tool = new Princessify();
 
 // モード別ランダムメッセージ
 const MESSAGES_EXISTING = [
-    '✨ふむ。整えておいたぞ。',
-    '✨色付けしてやったぞ。感謝したまえよ。',
-    '✨うむ。見やすくしておいた。',
+    '✨ふむ。最高のTLだな。',
+    '✨感謝したまえよ。'
 ];
 const MESSAGES_INFERENCE = [
     '✨ふむ。最高のTLだな。',
-    '✨うむ。仕上げてやったぞ。',
-    '✨推論しておいた。完璧だな。',
+    '✨感謝したまえよ。',
+    '✨推論の検証こそ学びだよ。'
 ];
 function pickMessage(mode: 'inference' | 'existing'): string {
     const pool = mode === 'inference' ? MESSAGES_INFERENCE : MESSAGES_EXISTING;
