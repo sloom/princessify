@@ -548,14 +548,14 @@ console.log('\n=== サブセット列挙テスト ===');
 {
     const results = generateAllCombinations(56000, [30000, 28000, 17000, 5000]);
     assertEqual(results.length, 8, 'A4: 4人入力→8通り');
-    // 1位: co=90, 4人全員, 〆=28000(B), rem=4000
+    // 1位: co=90, 4人全員, 〆=30000(A)（90秒同率→〆ダメージ降順）
     assertEqual(results[0].carryoverSec, 90, 'A4: 1位は90秒');
-    assertEqual(results[0].last.damage, 28000, 'A4: 1位の〆は28000');
+    assertEqual(results[0].last.damage, 30000, 'A4: 1位の〆は30000（高ダメージ〆優先）');
     assertEqual(results[0].participants.length, 3, 'A4: 1位の参加者3人');
     assertEqual(results[0].nonParticipants.length, 0, 'A4: 1位は不参加者なし');
-    // 2位: co=90, 4人全員, 〆=30000(A), rem=6000
+    // 2位: co=90, 4人全員, 〆=28000(B)
     assertEqual(results[1].carryoverSec, 90, 'A4: 2位も90秒');
-    assertEqual(results[1].last.damage, 30000, 'A4: 2位の〆は30000');
+    assertEqual(results[1].last.damage, 28000, 'A4: 2位の〆は28000');
     // 3位: co=82, 3人{A,B,C}, 〆=28000(B), rem=9000
     assertEqual(results[2].carryoverSec, 82, 'A4: 3位は82秒');
     assertEqual(results[2].nonParticipants.length, 1, 'A4: 3位の不参加者1人');
@@ -580,7 +580,7 @@ console.log('\n=== ランキング出力テスト ===');
 {
     const output = formatMochiResult(56000, [30000, 28000, 17000, 5000], ['A', 'B', 'C', 'D']);
     assertEqual(output.includes('(8通り)'), true, 'B2: 8通り表示');
-    assertEqual(output.includes('📌 1位 ― B〆'), true, 'B2: 1位はB〆');
+    assertEqual(output.includes('📌 1位 ― A〆'), true, 'B2: 1位はA〆（90秒同率→高ダメージ〆優先）');
     assertEqual(output.includes('[4人全員参加]'), true, 'B2: 全員参加パターンあり');
     assertEqual(output.includes('⚠️不参加:'), true, 'B2: 不参加者表示あり');
 }
@@ -611,7 +611,7 @@ assertEqual(
     assertEqual(parsed !== null, true, 'E1: パース成功');
     const output = formatMochiResult(parsed!.bossHp, parsed!.damages, parsed!.labels);
     assertEqual(output.includes('(8通り)'), true, 'E1: 8通り');
-    assertEqual(output.includes('📌 1位 ― B〆'), true, 'E1: 1位はB〆');
+    assertEqual(output.includes('📌 1位 ― A〆'), true, 'E1: 1位はA〆（90秒同率→高ダメージ〆優先）');
 }
 
 // === 持ち越しマーカー統合テスト ===
@@ -647,4 +647,63 @@ console.log('\n=== 持ち越しマーカー統合テスト ===');
     const output = formatMochiResult(parsed!.bossHp, parsed!.damages, parsed!.labels, parsed!.carryovers);
     assertEqual(output.includes('(8通り)'), true, 'G3: マーカーなし→8通り');
     assertEqual(output.includes('💼'), false, 'G3: 💼なし');
+}
+
+// === 90秒同率時の〆ダメージ降順ソートテスト ===
+console.log('\n=== 90秒同率時の〆ダメージ降順ソートテスト ===');
+
+// H1: 2人とも90秒 → 〆ダメージが高い方が上位
+{
+    // boss=56000, ゆりちゃん:50000, キルヒアイス:48000
+    // 〆=ゆりちゃん(50000): co=90, 〆=キルヒアイス(48000): co=90
+    // 新ルール: 〆ダメージ降順 → ゆりちゃん〆(50000) が 1位
+    const results = generateAllCombinations(56000, [50000, 48000], ['ゆりちゃん', 'キルヒアイス']);
+    assertEqual(results.length, 2, 'H1: 2通り');
+    assertEqual(results[0].carryoverSec, 90, 'H1: 1位は90秒');
+    assertEqual(results[1].carryoverSec, 90, 'H1: 2位も90秒');
+    assertEqual(results[0].last.label, 'ゆりちゃん', 'H1: 1位はゆりちゃん〆（ダメージ50000）');
+    assertEqual(results[1].last.label, 'キルヒアイス', 'H1: 2位はキルヒアイス〆（ダメージ48000）');
+}
+
+// H2: 90秒でない同率 → 従来通り残りHP昇順（新ルール適用外）
+{
+    // boss=50000, damages=[30000, 25000]
+    // 〆=25000: co=38, 〆=30000: co=35 → 同率ではないので影響なし
+    const results = generateAllCombinations(50000, [30000, 25000]);
+    assertEqual(results[0].last.damage, 25000, 'H2: 非90秒は従来通り（〆=25000が1位）');
+    assertEqual(results[1].last.damage, 30000, 'H2: 非90秒は従来通り（〆=30000が2位）');
+}
+
+// H3: 統合テスト（ユーザー例: -mochi 5.6 ゆりちゃん:5.0 キルヒアイス:4.8）
+{
+    const parsed = parseMochiMessage('-mochi 5.6 ゆりちゃん:5.0 キルヒアイス:4.8');
+    const output = formatMochiResult(parsed!.bossHp, parsed!.damages, parsed!.labels, parsed!.carryovers);
+    assertEqual(output.includes('📌 1位 ― ゆりちゃん〆'), true, 'H3: 1位はゆりちゃん〆（ダメージ高い方）');
+    assertEqual(output.includes('📌 2位 ― キルヒアイス〆'), true, 'H3: 2位はキルヒアイス〆');
+}
+
+// H4: 90秒が複数ある場合、情報行に「ℹ️〆ダメージ順」を表示
+{
+    const output = formatMochiResult(56000, [50000, 48000], ['ゆりちゃん', 'キルヒアイス']);
+    const lines = output.split('\n');
+    // 1位の情報行に表示
+    assertEqual(lines[4].includes('ℹ️〆ダメージ順'), true, 'H4: 1位の情報行にℹ️〆ダメージ順');
+    // 2位の情報行にも表示
+    assertEqual(lines[8].includes('ℹ️〆ダメージ順'), true, 'H4: 2位の情報行にもℹ️〆ダメージ順');
+}
+
+// H5: 90秒が1つだけ → ℹ️〆ダメージ順は非表示
+{
+    // boss=56000, [30000,28000,17000,5000] → 1位のみ90秒、2位は82秒
+    // ただしA4テストで1位も2位も90秒なので別のケースが必要
+    // boss=50000, [30000,25000] → co=38,35 → どちらも90秒でない
+    const output = formatMochiResult(50000, [30000, 25000]);
+    assertEqual(output.includes('ℹ️〆ダメージ順'), false, 'H5: 90秒なし→ℹ️非表示');
+}
+
+// H6: 90秒が1つだけのケース → ℹ️非表示
+{
+    // boss=50000, [45000,30000] → 〆=30000: co=90, 〆=45000: co=30 → 90秒は1つだけ
+    const output = formatMochiResult(50000, [45000, 30000]);
+    assertEqual(output.includes('ℹ️〆ダメージ順'), false, 'H6: 90秒が1つだけ→ℹ️非表示');
 }

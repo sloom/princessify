@@ -95,12 +95,13 @@ export function generateAllCombinations(
         }
     }
 
-    // ソート: 持ち越し秒数降順 → 参加人数降順 → 残りHP昇順
+    // ソート: 持ち越し秒数降順 → 参加人数降順 → 90秒同率時は〆ダメージ降順 → 残りHP昇順
     results.sort((a, b) => {
         if (b.carryoverSec !== a.carryoverSec) return b.carryoverSec - a.carryoverSec;
         const aTotal = a.participants.length + 1;
         const bTotal = b.participants.length + 1;
         if (bTotal !== aTotal) return bTotal - aTotal;
+        if (a.carryoverSec === 90 && b.last.damage !== a.last.damage) return b.last.damage - a.last.damage;
         const aRemHp = bossHp - a.participants.reduce((s, p) => s + p.damage, 0);
         const bRemHp = bossHp - b.participants.reduce((s, p) => s + p.damage, 0);
         return aRemHp - bRemHp;
@@ -192,6 +193,7 @@ function renderCombos(
 ): string {
     const shown = combos.slice(0, maxItems);
     const blocks: string[] = [`👾 敵の残りHP: ${bossHp}  (${combos.length}通り)`];
+    const multipleMax = combos.filter(c => c.carryoverSec === 90).length >= 2;
 
     shown.forEach((combo, idx) => {
         const totalParticipants = combo.participants.length + 1;
@@ -221,10 +223,11 @@ function renderCombos(
             participationInfo = `[${totalParticipants}人参加 ⚠️不参加: ${nonLabels}]`;
         }
 
+        const sortNote = (multipleMax && combo.carryoverSec === 90) ? ' ｜ ℹ️〆ダメージ順' : '';
         blocks.push(
             `${header}\n` +
             `  ${orderLine}\n` +
-            `  ⏰ ${combo.carryoverSec}秒 ｜ ⚡${combo.fullCarryoverDmg}万 ｜ ${participationInfo}`
+            `  ⏰ ${combo.carryoverSec}秒 ｜ ⚡${combo.fullCarryoverDmg}万 ｜ ${participationInfo}${sortNote}`
         );
     });
 
