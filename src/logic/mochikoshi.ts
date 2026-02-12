@@ -21,6 +21,7 @@ export interface Participant {
     originalIndex: number;
     damage: number;
     label: string | undefined;
+    isCarryover: boolean;
 }
 
 export interface CombinationResult {
@@ -34,10 +35,12 @@ export interface CombinationResult {
 export function generateAllCombinations(
     bossHp: number,
     damages: number[],
-    labels?: (string | undefined)[]
+    labels?: (string | undefined)[],
+    carryovers?: boolean[]
 ): CombinationResult[] {
     const n = damages.length;
     const safeLabels = labels ?? damages.map(() => undefined);
+    const safeCarryovers = carryovers ?? damages.map(() => false);
     const results: CombinationResult[] = [];
 
     // 全サブセット列挙（2人以上）
@@ -48,8 +51,9 @@ export function generateAllCombinations(
         }
         if (indices.length < 2) continue;
 
-        // 各参加者を〆として試す
+        // 各参加者を〆として試す（持ち越しメンバーは〆不可）
         for (const closerIdx of indices) {
+            if (safeCarryovers[closerIdx]) continue;
             const others = indices.filter(i => i !== closerIdx);
             const otherSum = others.reduce((s, i) => s + damages[i], 0);
             const remainingHp = bossHp - otherSum;
@@ -61,11 +65,13 @@ export function generateAllCombinations(
                 originalIndex: i,
                 damage: damages[i],
                 label: safeLabels[i],
+                isCarryover: safeCarryovers[i],
             }));
             const last: Participant = {
                 originalIndex: closerIdx,
                 damage: damages[closerIdx],
                 label: safeLabels[closerIdx],
+                isCarryover: safeCarryovers[closerIdx],
             };
             const nonIndices: number[] = [];
             for (let j = 0; j < n; j++) {
@@ -75,6 +81,7 @@ export function generateAllCombinations(
                 originalIndex: i,
                 damage: damages[i],
                 label: safeLabels[i],
+                isCarryover: safeCarryovers[i],
             }));
 
             const otherDamages = others.map(i => damages[i]);
@@ -113,7 +120,10 @@ export interface MochiInput {
     bossHp: number;
     damages: number[];
     labels: (string | undefined)[];
+    carryovers: boolean[];
 }
+
+const CARRYOVER_MARKER_RE = /[*💼]$/u;
 
 export function parseMochiMessage(text: string): MochiInput | null {
     const match = text.match(/[@-](?:mochi|mo)\b(!?)\s+(.+)/);
@@ -123,30 +133,44 @@ export function parseMochiMessage(text: string): MochiInput | null {
 
     const numbers: number[] = [];
     const labels: (string | undefined)[] = [];
+    const carryovers: boolean[] = [];
 
     for (const token of tokens) {
         const colonIdx = token.indexOf(':');
         if (colonIdx !== -1) {
             const left = token.substring(0, colonIdx);
             const right = token.substring(colonIdx + 1);
-            const leftNum = Number(left);
-            const rightNum = Number(right);
-            if (!isNaN(leftNum) && left !== '') {
-                // NUMBER:LABEL (例: 3:Alice, 3:<@111>)
+
+            // マーカーをストリップして数値判定
+            const leftStripped = left.replace(CARRYOVER_MARKER_RE, '');
+            const leftMarked = leftStripped !== left;
+            const rightStripped = right.replace(CARRYOVER_MARKER_RE, '');
+            const rightMarked = rightStripped !== right;
+
+            const leftNum = Number(leftStripped);
+            const rightNum = Number(rightStripped);
+            if (!isNaN(leftNum) && leftStripped !== '') {
+                // NUMBER:LABEL (例: 3:Alice, 2.8*:Bob)
                 numbers.push(leftNum);
                 labels.push(right || undefined);
-            } else if (!isNaN(rightNum) && right !== '') {
-                // LABEL:NUMBER (例: <@111>:3, Alice:3)
+                carryovers.push(leftMarked);
+            } else if (!isNaN(rightNum) && rightStripped !== '') {
+                // LABEL:NUMBER (例: Alice:3, Bob:2.8*)
                 numbers.push(rightNum);
                 labels.push(left || undefined);
+                carryovers.push(rightMarked);
             } else {
                 return null;
             }
         } else {
-            const num = Number(token);
+            // マーカーをストリップして数値判定
+            const stripped = token.replace(CARRYOVER_MARKER_RE, '');
+            const marked = stripped !== token;
+            const num = Number(stripped);
             if (isNaN(num)) return null;
             numbers.push(num);
             labels.push(undefined);
+            carryovers.push(marked);
         }
     }
 
@@ -156,6 +180,7 @@ export function parseMochiMessage(text: string): MochiInput | null {
         bossHp: normalized[0],
         damages: normalized.slice(1),
         labels: labels.slice(1),
+        carryovers: carryovers.slice(1),
     };
 }
 
@@ -172,8 +197,9 @@ function renderCombos(
         const totalParticipants = combo.participants.length + 1;
         const allParticipate = totalParticipants === totalPeople;
 
+        const co = (p: Participant) => p.isCarryover ? '💼' : '';
         const parts: string[] = combo.participants.map(p =>
-            p.label ? `${p.label} ${p.damage}` : `${p.damage}`
+            p.label ? `${p.label}${co(p)} ${p.damage}` : `${p.damage}${co(p)}`
         );
         const lastPart = combo.last.label
             ? `${combo.last.label}(〆) ${combo.last.damage}`
@@ -209,12 +235,12 @@ function renderCombos(
     return blocks.join('\n\n');
 }
 
-export function formatMochiResult(bossHp: number, damages: number[], labels?: (string | undefined)[]): string {
+export function formatMochiResult(bossHp: number, damages: number[], labels?: (string | undefined)[], carryovers?: boolean[]): string {
     if (damages.length > 10) {
         return '⚠️ ダメージの入力は最大10人までです。';
     }
 
-    const combos = generateAllCombinations(bossHp, damages, labels);
+    const combos = generateAllCombinations(bossHp, damages, labels, carryovers);
 
     if (combos.length === 0) {
         return `👾 敵の残りHP: ${bossHp}\n\n⚠️ 有効な組み合わせがありません。`;

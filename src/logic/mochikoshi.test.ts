@@ -378,6 +378,62 @@ console.log('\n=== ラベル対応テスト ===');
     assertEqual(lines[7], '  25000 → Alice(〆) 30000', '混在fmt: 2位順序');
 }
 
+// === 持ち越しマーカー対応テスト ===
+console.log('\n=== 持ち越しマーカー対応テスト ===');
+
+// C1: * マーカー付き数値（コロンなし）
+{
+    const parsed = parseMochiMessage('@mochi 5 3 2.8*');
+    assertEqual(parsed !== null, true, 'C1: パース成功');
+    assertEqual(parsed!.damages[1], 28000, 'C1: 2.8* → 28000');
+    assertEqual(parsed!.carryovers[0], false, 'C1: carryovers[0]=false');
+    assertEqual(parsed!.carryovers[1], true, 'C1: carryovers[1]=true');
+}
+
+// C2: 💼 マーカー付き数値（コロンなし）
+{
+    const parsed = parseMochiMessage('@mochi 5 3 2.8💼');
+    assertEqual(parsed !== null, true, 'C2: パース成功');
+    assertEqual(parsed!.damages[1], 28000, 'C2: 2.8💼 → 28000');
+    assertEqual(parsed!.carryovers[1], true, 'C2: carryovers[1]=true');
+}
+
+// C3: LABEL:NUMBER* パターン
+{
+    const parsed = parseMochiMessage('@mochi 5 Alice:3 Bob:2.8*');
+    assertEqual(parsed !== null, true, 'C3: パース成功');
+    assertEqual(parsed!.damages[1], 28000, 'C3: Bob:2.8* → 28000');
+    assertEqual(parsed!.labels[1], 'Bob', 'C3: labels[1]=Bob');
+    assertEqual(parsed!.carryovers[0], false, 'C3: carryovers[0]=false');
+    assertEqual(parsed!.carryovers[1], true, 'C3: carryovers[1]=true');
+}
+
+// C4: NUMBER*:LABEL パターン
+{
+    const parsed = parseMochiMessage('@mochi 5 3:Alice 2.8*:Bob');
+    assertEqual(parsed !== null, true, 'C4: パース成功');
+    assertEqual(parsed!.damages[1], 28000, 'C4: 2.8*:Bob → 28000');
+    assertEqual(parsed!.labels[1], 'Bob', 'C4: labels[1]=Bob');
+    assertEqual(parsed!.carryovers[1], true, 'C4: carryovers[1]=true');
+}
+
+// C5: マーカーなし → carryovers全false（後方互換）
+{
+    const parsed = parseMochiMessage('@mochi 5 3 2.5');
+    assertEqual(parsed!.carryovers[0], false, 'C5: carryovers[0]=false');
+    assertEqual(parsed!.carryovers[1], false, 'C5: carryovers[1]=false');
+}
+
+// C6: 複数人のうち1人だけマーカー
+{
+    const parsed = parseMochiMessage('@mochi 5.6 ゆりちゃん:3.0 キルヒアイス:2.8* ジルグ:1.7 いちにの:0.5');
+    assertEqual(parsed !== null, true, 'C6: パース成功');
+    assertEqual(parsed!.carryovers[0], false, 'C6: ゆりちゃん=false');
+    assertEqual(parsed!.carryovers[1], true, 'C6: キルヒアイス=true');
+    assertEqual(parsed!.carryovers[2], false, 'C6: ジルグ=false');
+    assertEqual(parsed!.carryovers[3], false, 'C6: いちにの=false');
+}
+
 // === LABEL:NUMBER 逆順フォーマット対応テスト ===
 console.log('\n=== LABEL:NUMBER 逆順フォーマットテスト ===');
 
@@ -412,6 +468,77 @@ console.log('\n=== LABEL:NUMBER 逆順フォーマットテスト ===');
     const parsed = parseMochiMessage('@mochi! 50000 Alice:30000 Bob:25000');
     assertEqual(parsed!.damages[0], 30000, '逆順生モード: damages[0]=30000');
     assertEqual(parsed!.labels[0], 'Alice', '逆順生モード: labels[0]=Alice');
+}
+
+// === 持ち越しメンバー〆除外テスト ===
+console.log('\n=== 持ち越しメンバー〆除外テスト ===');
+
+// D1: carryoverメンバー(index=1, 28000)が〆から除外される
+{
+    // 元は8通り。index=1(28000)が〆の4通りが除外→残り4通り
+    const results = generateAllCombinations(
+        56000, [30000, 28000, 17000, 5000],
+        ['ゆりちゃん', 'キルヒアイス', 'ジルグ', 'いちにの'],
+        [false, true, false, false]
+    );
+    assertEqual(results.length, 4, 'D1: キルヒアイス〆除外→4通り');
+    // 全結果でキルヒアイスが〆でないことを確認
+    for (let i = 0; i < results.length; i++) {
+        assertEqual(results[i].last.label !== 'キルヒアイス', true, `D1: ${i+1}位の〆はキルヒアイスでない`);
+    }
+}
+
+// D2: carryoversなし（後方互換）→ 元通り8通り
+{
+    const results = generateAllCombinations(
+        56000, [30000, 28000, 17000, 5000],
+        ['ゆりちゃん', 'キルヒアイス', 'ジルグ', 'いちにの']
+    );
+    assertEqual(results.length, 8, 'D2: carryoversなし→8通り（後方互換）');
+}
+
+// D3: 2人中1人がcarryover → その人は〆にならない（1通りのみ）
+{
+    const results = generateAllCombinations(
+        50000, [30000, 25000],
+        ['甲', '乙'],
+        [true, false]
+    );
+    assertEqual(results.length, 1, 'D3: 甲がcarryover→乙〆のみ');
+    assertEqual(results[0].last.label, '乙', 'D3: 〆は乙');
+}
+
+// === 💼出力表示テスト ===
+console.log('\n=== 💼出力表示テスト ===');
+
+// F1: carryoverメンバーのダメージに💼が付く
+{
+    const output = formatMochiResult(
+        50000, [30000, 25000],
+        ['甲', '乙'],
+        [true, false]
+    );
+    const lines = output.split('\n');
+    // 甲がcarryover → 甲のダメージに💼、乙が〆（甲は〆不可）
+    assertEqual(lines[2], '📌 1位 ― 乙〆', 'F1: 乙〆のみ');
+    assertEqual(lines[3], '  甲💼 30000 → 乙(〆) 25000', 'F1: 甲に💼表示');
+}
+
+// F2: carryoverなし（後方互換）→ 💼なし
+{
+    const output = formatMochiResult(50000, [30000, 25000], ['甲', '乙']);
+    assertEqual(output.includes('💼'), false, 'F2: carryoverなし→💼なし');
+}
+
+// F3: ラベルなしcarryover → ダメージの後に💼
+{
+    const output = formatMochiResult(
+        50000, [30000, 25000],
+        [undefined, undefined],
+        [true, false]
+    );
+    const lines = output.split('\n');
+    assertEqual(lines[3], '  30000💼 → (〆) 25000', 'F3: ラベルなしcarryover→30000💼');
 }
 
 // === サブセット列挙テスト ===
@@ -485,4 +612,39 @@ assertEqual(
     const output = formatMochiResult(parsed!.bossHp, parsed!.damages, parsed!.labels);
     assertEqual(output.includes('(8通り)'), true, 'E1: 8通り');
     assertEqual(output.includes('📌 1位 ― B〆'), true, 'E1: 1位はB〆');
+}
+
+// === 持ち越しマーカー統合テスト ===
+console.log('\n=== 持ち越しマーカー統合テスト ===');
+
+// G1: ユーザーサンプル入力（キルヒアイスが持ち越し → キルヒアイス〆を除外）
+{
+    const parsed = parseMochiMessage('-mochi 5.6 ゆりちゃん:3.0 キルヒアイス:2.8* ジルグ:1.7 いちにの:0.5');
+    assertEqual(parsed !== null, true, 'G1: パース成功');
+    assertEqual(parsed!.carryovers[1], true, 'G1: キルヒアイス=carryover');
+    const output = formatMochiResult(parsed!.bossHp, parsed!.damages, parsed!.labels, parsed!.carryovers);
+    // 元は8通り、キルヒアイス〆4通り除外→4通り
+    assertEqual(output.includes('(4通り)'), true, 'G1: 4通り');
+    assertEqual(output.includes('キルヒアイス〆'), false, 'G1: キルヒアイス〆なし');
+    assertEqual(output.includes('ゆりちゃん〆'), true, 'G1: ゆりちゃん〆あり');
+    // キルヒアイスのダメージに💼が付く
+    assertEqual(output.includes('キルヒアイス💼'), true, 'G1: キルヒアイス💼表示');
+}
+
+// G2: 💼マーカーでも同じ結果
+{
+    const parsed = parseMochiMessage('-mochi 5.6 ゆりちゃん:3.0 キルヒアイス:2.8💼 ジルグ:1.7 いちにの:0.5');
+    assertEqual(parsed !== null, true, 'G2: 💼マーカーパース成功');
+    assertEqual(parsed!.carryovers[1], true, 'G2: キルヒアイス=carryover');
+    const output = formatMochiResult(parsed!.bossHp, parsed!.damages, parsed!.labels, parsed!.carryovers);
+    assertEqual(output.includes('(4通り)'), true, 'G2: 4通り');
+    assertEqual(output.includes('キルヒアイス〆'), false, 'G2: キルヒアイス〆なし');
+}
+
+// G3: マーカーなし → 従来通り8通り（後方互換）
+{
+    const parsed = parseMochiMessage('-mochi 5.6 ゆりちゃん:3.0 キルヒアイス:2.8 ジルグ:1.7 いちにの:0.5');
+    const output = formatMochiResult(parsed!.bossHp, parsed!.damages, parsed!.labels, parsed!.carryovers);
+    assertEqual(output.includes('(8通り)'), true, 'G3: マーカーなし→8通り');
+    assertEqual(output.includes('💼'), false, 'G3: 💼なし');
 }

@@ -128,7 +128,7 @@ client.on(Events.MessageCreate, async message => {
     // @mochi: 持ち越し時間計算
     const mochiInput = parseMochiMessage(message.content);
     if (mochiInput) {
-        const result = formatMochiResult(mochiInput.bossHp, mochiInput.damages, mochiInput.labels);
+        const result = formatMochiResult(mochiInput.bossHp, mochiInput.damages, mochiInput.labels, mochiInput.carryovers);
         await message.reply(result);
         return;
     }
