@@ -2267,4 +2267,49 @@ assert(detectAutoState('1:04 ongoing battle') === null, '47f: ongoing → null')
     assertNotIncludes(battleEnd ?? '', '🌟', '47n: バトル終了に🌟なし');
 }
 
+// ========================================
+// 48. 🌟: 【オートON/OFF】のみの行に🌟なし
+// ========================================
+console.log('\n=== 48. 【オートON/OFF】のみの行に🌟なし ===');
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+✕〇〇✕〇　【オートOFF】
+
+1:16 甲　✕〇〇〇〇　【オートON】
+1:11 乙　〇〇〇〇✕　【オートOFF】
+1:08 丙　〇✕〇〇〇
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    // 【オートON】のみの行に🌟なし
+    const line116 = lines.find(l => l.includes('1:16') && l.includes('甲'));
+    assertNotIncludes(line116 ?? '', '🌟', '48a: 【オートON】のみの行に🌟なし');
+
+    // 【オートOFF】のみの行に🌟なし
+    const line111 = lines.find(l => l.includes('1:11') && l.includes('乙'));
+    assertNotIncludes(line111 ?? '', '🌟', '48b: 【オートOFF】のみの行に🌟なし');
+
+    // 通常行にも🌟なし（キャラ名のみ）
+    const line108 = lines.find(l => l.includes('1:08') && l.includes('丙'));
+    assertNotIncludes(line108 ?? '', '🌟', '48c: キャラ名のみの行に🌟なし');
+}
+
+// 48d: 【オートON】＋手動指示テキストがある場合は🌟あり
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:16 甲 ソングデバフ後 ✕〇〇〇〇　【オートON】
+1:11 乙　〇〇〇〇✕　【オートOFF】
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    // 手動指示テキスト＋【オートON】→🌟あり
+    const line116 = lines.find(l => l.includes('1:16') && l.includes('甲'));
+    assertIncludes(line116 ?? '', '🌟', '48d: 手動指示テキスト＋【オートON】→🌟あり');
+}
+
 console.log('\n=== テスト完了 ===\n');
