@@ -2268,6 +2268,30 @@ assert(detectAutoState('1:04 ongoing battle') === null, '47f: ongoing → null')
 }
 
 // ========================================
+// 47o. 🌟: boss/ボス/敵で始まる行に🌟なし
+// ========================================
+console.log('\n=== 47o. boss/ボス/敵キーワードに🌟なし ===');
+{
+    const tool = new Princessify();
+    const input = `-dango
+1:30 バトル開始　[〇ー〇〇ー]
+0:05 boss ヴァンピ　退場;w;
+0:04 ボス 特殊行動
+0:03 敵 全体攻撃`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    const bossLine = lines.find(l => l.includes('0:05') && l.includes('boss'));
+    assertNotIncludes(bossLine ?? '', '🌟', '47o-1: boss行に🌟なし');
+
+    const bosuLine = lines.find(l => l.includes('0:04') && l.includes('ボス'));
+    assertNotIncludes(bosuLine ?? '', '🌟', '47o-2: ボス行に🌟なし');
+
+    const tekiLine = lines.find(l => l.includes('0:03') && l.includes('敵'));
+    assertNotIncludes(tekiLine ?? '', '🌟', '47o-3: 敵行に🌟なし');
+}
+
+// ========================================
 // 48. 🌟: 【オートON/OFF】のみの行に🌟なし
 // ========================================
 console.log('\n=== 48. 【オートON/OFF】のみの行に🌟なし ===');

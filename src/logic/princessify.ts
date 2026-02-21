@@ -580,7 +580,9 @@ export class Princessify {
                 } else if (afterTimestamp) {
                     const firstWordEnd = afterTimestamp.search(/[\s\u3000]/);
                     const firstWord = firstWordEnd === -1 ? afterTimestamp : afterTimestamp.substring(0, firstWordEnd);
-                    if (firstWord === 'バトル開始' || firstWord === 'バトル終了') {
+                    const lw = firstWord.toLowerCase();
+                    if (firstWord === 'バトル開始' || firstWord === 'バトル終了'
+                        || lw === 'boss' || firstWord === 'ボス' || firstWord === '敵') {
                         textAfterActor = '';
                     } else {
                         textAfterActor = firstWordEnd === -1 ? '' : afterTimestamp.substring(firstWordEnd);
