@@ -444,8 +444,8 @@ console.log('\n=== formatRouteResult テスト ===\n');
     const routes = findAllRoutes(parties);
     const output = formatRouteResult(routes, parties);
     const text = output.join('\n');
-    // 複数候補がある場合: 独立なら "or"、非独立で少数なら "パターン"、非独立で多数なら "通り" 要約
-    assert(text.includes('or') || text.includes('パターン') || text.includes('通り'), '[26] 複数候補表示');
+    // 複数候補がある場合: 独立なら "or"、非独立で少数なら "パターン"、非独立で多数ならコンパクト表示（"自由" を含む）
+    assert(text.includes('or') || text.includes('パターン') || text.includes('自由'), '[26] 複数候補表示');
 }
 
 // [27] ボス絵文字の表示
@@ -554,9 +554,13 @@ console.log('\n=== 統合テスト ===\n');
     const output = formatRouteResult(routes, input!.parties);
     const text = output.join('\n');
 
-    // ルート1→2→3は非独立（甲:1,2被り、乙:1,3被り）→ 13パターン → 要約表示
+    // ルート1→2→3は非独立（甲:1,2被り、乙:1,3被り）→ 13パターン → コンパクト表示
     const r123section = text.split('⚔️1→2→3')[1]?.split('⚔️')[0] ?? '';
-    assertIncludes(r123section, '通り', '[31] 非独立パターン多数は要約表示');
+    // コンパクト表示: 折りたたみレンタル行に「自由」や制約キャラ名がある
+    assertIncludes(r123section, '自由', '[31] コンパクト表示に自由がある');
+    // 甲と乙の制約が見える
+    assertIncludes(r123section, '甲', '[31b] 甲の制約が見える');
+    assertIncludes(r123section, '乙', '[31c] 乙の制約が見える');
 }
 
 // ==============================================
@@ -587,7 +591,7 @@ console.log('\n=== 非独立パターン多数時の要約テスト ===\n');
     }
 }
 
-// [33] 非独立パターン多数（>5）のルートは「パターンA/B」列挙ではなく要約になる
+// [33] 非独立パターン多数（>5）のルートは「パターンA/B」列挙ではなくコンパクト表示
 {
     const input = parseRouteMessage(`@route
 シナツ ジオツム パオイ スズナ アラクネ
@@ -599,11 +603,12 @@ console.log('\n=== 非独立パターン多数時の要約テスト ===\n');
     const output = formatRouteResult(routes, input!.parties);
     const text = output.join('\n');
 
-    // ルート1-2-5は45パターンあるはず → パターンA/B列挙ではなく要約
+    // ルート1-2-5は45パターンあるはず → パターンA/B列挙ではなくコンパクト表示
     const r125section = text.split('⚔️1→2→5')[1]?.split('⚔️')[0] ?? '';
     assert(!r125section.includes('パターンA'), `[33a] 45パターンのルートにパターンA列挙がない`);
-    // 代わりに通り数の注記がある
-    assertIncludes(r125section, '通り', '[33b] パターン数の注記がある');
+    // 「※レンタル自由」が全3行にならない（実際に制約がある場合）
+    // 水アメスが2ボスと5ボスで被るので、レンタル制約がある
+    assertIncludes(r125section, '水アメス', '[33b] 水アメスのレンタル制約が表示される');
 }
 
 // [34] 非独立パターン少数（≤5）のルートは従来通りパターン列挙
@@ -628,7 +633,7 @@ console.log('\n=== 非独立パターン多数時の要約テスト ===\n');
     assertIncludes(text, 'パターン', '[34] 少パターンは従来のパターン列挙');
 }
 
-// [35] 要約表示でレンタル候補が表示される
+// [35] ルート1→2→4でレンタル制約が正しく表示される（レンタル自由の誤表示がない）
 {
     const input = parseRouteMessage(`@route
 シナツ ジオツム パオイ スズナ アラクネ
@@ -640,11 +645,37 @@ console.log('\n=== 非独立パターン多数時の要約テスト ===\n');
     const output = formatRouteResult(routes, input!.parties);
     const text = output.join('\n');
 
-    // 要約形式でもレンタル候補の情報（or表示またはレンタル自由）がある
-    // ルート1-2-5のセクションを取得
+    // ルート1-2-4のセクション
+    const r124section = text.split('⚔️1→2→4')[1]?.split('⚔️')[0] ?? '';
+
+    // アラクネとイサナギが被るので、レンタル制約が見える必要がある
+    assertIncludes(r124section, 'アラクネ', '[35a] アラクネのレンタル制約が表示');
+    assertIncludes(r124section, 'イサナギ', '[35b] イサナギのレンタル制約が表示');
+
+    // 全行が「※レンタル自由」にはならない（少なくとも一部に制約がある）
+    const freeCount = (r124section.match(/レンタル自由/g) || []).length;
+    assert(freeCount < 3, `[35c] 全行がレンタル自由ではない (実際: ${freeCount})`);
+}
+
+// [36] ルート1→2→5のコンパクト表示で水アメスの制約が見える
+{
+    const input = parseRouteMessage(`@route
+シナツ ジオツム パオイ スズナ アラクネ
+イサナギ 水タマキ プリシェフィ 水エリコ 水アメス
+スミレ 魔ジータ ヴァンピィ ネネカ エキドナ
+イサナギ アイラ ネフィ アラクネ マホ
+ユイ ソノ ラビリスタ アルノゾ 水アメス`);
+    const routes = findAllRoutes(input!.parties);
+    const output = formatRouteResult(routes, input!.parties);
+    const text = output.join('\n');
+
+    // ルート1-2-5のセクション（45パターン → コンパクト表示）
     const r125section = text.split('⚔️1→2→5')[1]?.split('⚔️')[0] ?? '';
-    // 各バトル行がある（ボス番号で確認）
-    assertIncludes(r125section, '1', '[35a] ボス1の行がある');
-    assertIncludes(r125section, '2', '[35b] ボス2の行がある');
-    assertIncludes(r125section, '5', '[35c] ボス5の行がある');
+
+    // コンパクトレンタル行があること（"ボス番号(キャラ名)" 形式）
+    // 例: 2(水アメス) のような表示
+    assert(r125section.includes('(水アメス)'), `[36a] 水アメスのレンタル制約がコンパクト表示`);
+
+    // 「自由」がコンパクト行に含まれる（一部のバトルは自由）
+    assertIncludes(r125section, '自由', '[36b] 自由なバトルも表示される');
 }

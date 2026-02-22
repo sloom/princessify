@@ -248,6 +248,70 @@ function formatBattleLine(
 /** 非独立パターンをパターン列挙する上限 */
 const MAX_DEPENDENT_PATTERNS = 5;
 
+// --- パターン折りたたみ ---
+
+/** 折りたたまれたレンタルスロット: null=自由, string[]=候補名リスト */
+type RentalSlot = null | string[];
+type CollapsedPattern = [RentalSlot, RentalSlot, RentalSlot];
+
+/**
+ * 非独立パターンを折りたたむ。
+ * 同一制約で1バトルだけ異なるパターンをグループ化し、
+ * 全5人がレンタル候補なら「自由」(null)に、それ以外は候補リストにまとめる。
+ */
+function collapseRentalPatterns(patterns: [string, string, string][], partySize: number = 5): CollapsedPattern[] {
+    let current: CollapsedPattern[] = patterns.map(p => [[p[0]], [p[1]], [p[2]]]);
+
+    // 各バトル位置について、他の位置が同じパターンをグループ化して折りたたむ
+    for (let b = 0; b < 3; b++) {
+        const groups = new Map<string, CollapsedPattern[]>();
+        for (const pat of current) {
+            const key = pat.map((v, i) => i === b ? '*' : JSON.stringify(v)).join('|');
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(pat);
+        }
+
+        const next: CollapsedPattern[] = [];
+        for (const group of groups.values()) {
+            // グループ内の全パターンからバトルbの候補名を収集
+            const names = new Set<string>();
+            let hasNull = false;
+            for (const p of group) {
+                if (p[b] === null) { hasNull = true; break; }
+                for (const n of p[b]!) names.add(n);
+            }
+
+            const merged: CollapsedPattern = [group[0][0], group[0][1], group[0][2]];
+            if (hasNull || names.size >= partySize) {
+                merged[b] = null; // 全員候補 = 自由
+            } else {
+                merged[b] = [...names];
+            }
+            next.push(merged);
+        }
+        current = next;
+    }
+
+    // 重複除去
+    const seen = new Set<string>();
+    return current.filter(pat => {
+        const key = JSON.stringify(pat);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+/** 折りたたみパターン1行をフォーマット: "1(自由) 2(イサナギ) 4(アラクネ)" */
+function formatCollapsedLine(pattern: CollapsedPattern, bosses: number[], emojis: string[]): string {
+    return pattern.map((slot, i) => {
+        const bossNum = bosses[i] + 1;
+        if (slot === null) return `${bossNum}(自由)`;
+        if (slot.length === 1) return `${bossNum}(${slot[0]})`;
+        return `${bossNum}(${slot.join('/')})`;
+    }).join(' ');
+}
+
 /** 1ルート分をフォーマット */
 function formatSingleRoute(route: ValidRoute, parties: BossParty[], emojis: string[]): string {
     const routeLabel = route.bosses.map(b => b + 1).join('→');
@@ -274,11 +338,17 @@ function formatSingleRoute(route: ValidRoute, parties: BossParty[], emojis: stri
                 }
             }
         } else {
-            // パターン数が多い場合は要約表示（各バトルのレンタル候補 + 通り数）
+            // パターン数が多い場合はコンパクト表示（パーティ一覧 + 折りたたみレンタル行）
             for (let i = 0; i < 3; i++) {
-                lines.push(formatBattleLine(route.battles[i], parties[route.bosses[i]], emojis));
+                const bossNum = route.bosses[i] + 1;
+                const emoji = emojis[route.bosses[i]] ?? '';
+                const memberNames = parties[route.bosses[i]].members.map(m => m.name).join(' ');
+                lines.push(`${bossNum}${emoji} ${memberNames}`);
             }
-            lines.push(`  ※レンタル依存あり（${uniquePatterns.length}通り）`);
+            const collapsed = collapseRentalPatterns(uniquePatterns);
+            for (const cp of collapsed) {
+                lines.push(`  ${formatCollapsedLine(cp, route.bosses, emojis)}`);
+            }
         }
     }
 
