@@ -444,9 +444,8 @@ console.log('\n=== formatRouteResult テスト ===\n');
     const routes = findAllRoutes(parties);
     const output = formatRouteResult(routes, parties);
     const text = output.join('\n');
-    // 複数候補がある場合 "or" が含まれるか、レンタル自由になるはず
-    // ルート0-1-2で甲をどちらかでレンタル → 非独立なので "パターン" 表示かも
-    assert(text.includes('or') || text.includes('パターン'), '[26] 複数候補表示');
+    // 複数候補がある場合: 独立なら "or"、非独立で少数なら "パターン"、非独立で多数なら "通り" 要約
+    assert(text.includes('or') || text.includes('パターン') || text.includes('通り'), '[26] 複数候補表示');
 }
 
 // [27] ボス絵文字の表示
@@ -541,7 +540,7 @@ console.log('\n=== 統合テスト ===\n');
     assertIncludes(text, '見つかりません', '[30] ルートなしメッセージ');
 }
 
-// [31] 非独立パターンの表示確認
+// [31] 非独立パターンの要約表示確認（パターン数が多い場合）
 {
     const input = parseRouteMessage(`@route
 甲 乙 丙 丁 戊
@@ -555,7 +554,97 @@ console.log('\n=== 統合テスト ===\n');
     const output = formatRouteResult(routes, input!.parties);
     const text = output.join('\n');
 
-    // ルート1→2→3は非独立（甲:1,2被り、乙:1,3被り）
+    // ルート1→2→3は非独立（甲:1,2被り、乙:1,3被り）→ 13パターン → 要約表示
     const r123section = text.split('⚔️1→2→3')[1]?.split('⚔️')[0] ?? '';
-    assertIncludes(r123section, 'パターン', '[31] 非独立パターン表示');
+    assertIncludes(r123section, '通り', '[31] 非独立パターン多数は要約表示');
+}
+
+// ==============================================
+// フェーズ7: 非独立パターン多数時の要約表示テスト
+// ==============================================
+
+console.log('\n=== 非独立パターン多数時の要約テスト ===\n');
+
+// [32] *なし入力（バグ報告ケース）で出力がDiscord制限内に収まる
+{
+    const input = parseRouteMessage(`@route
+シナツ ジオツム パオイ スズナ アラクネ
+イサナギ 水タマキ プリシェフィ 水エリコ 水アメス
+スミレ 魔ジータ ヴァンピィ ネネカ エキドナ
+イサナギ アイラ ネフィ アラクネ マホ
+ユイ ソノ ラビリスタ アルノゾ 水アメス`);
+    assert(input !== null, '[32] パース成功');
+    validateInput(input!);
+    const routes = findAllRoutes(input!.parties);
+    const output = formatRouteResult(routes, input!.parties);
+
+    // 出力メッセージ数が3以下に収まること
+    assert(output.length <= 3, `[32a] 出力メッセージ数が3以下 (実際: ${output.length})`);
+
+    // 各メッセージが2000文字以下
+    for (let i = 0; i < output.length; i++) {
+        assert(output[i].length <= 1900, `[32b] メッセージ${i}が1900文字以下 (実際: ${output[i].length})`);
+    }
+}
+
+// [33] 非独立パターン多数（>5）のルートは「パターンA/B」列挙ではなく要約になる
+{
+    const input = parseRouteMessage(`@route
+シナツ ジオツム パオイ スズナ アラクネ
+イサナギ 水タマキ プリシェフィ 水エリコ 水アメス
+スミレ 魔ジータ ヴァンピィ ネネカ エキドナ
+イサナギ アイラ ネフィ アラクネ マホ
+ユイ ソノ ラビリスタ アルノゾ 水アメス`);
+    const routes = findAllRoutes(input!.parties);
+    const output = formatRouteResult(routes, input!.parties);
+    const text = output.join('\n');
+
+    // ルート1-2-5は45パターンあるはず → パターンA/B列挙ではなく要約
+    const r125section = text.split('⚔️1→2→5')[1]?.split('⚔️')[0] ?? '';
+    assert(!r125section.includes('パターンA'), `[33a] 45パターンのルートにパターンA列挙がない`);
+    // 代わりに通り数の注記がある
+    assertIncludes(r125section, '通り', '[33b] パターン数の注記がある');
+}
+
+// [34] 非独立パターン少数（≤5）のルートは従来通りパターン列挙
+{
+    // ボス0,1に甲乙が2キャラ被り、ボス2は*で固定 → 非独立で2パターンのみ
+    const input = parseRouteMessage(`@route
+甲 乙 丙 丁 戊
+甲 乙 辛 壬 癸
+子* 丑 寅 卯 辰
+巳 午 未 申 酉
+戌 亥 鼠 牛 虎`);
+    const routes = findAllRoutes(input!.parties);
+    const r012 = routes.find(r =>
+        r.bosses[0] === 0 && r.bosses[1] === 1 && r.bosses[2] === 2);
+    assert(r012 !== undefined, '[34] ルート0-1-2が存在');
+    assert(!r012!.isIndependent, '[34] 非独立');
+    assert(r012!.dependentPatterns !== undefined && r012!.dependentPatterns.length <= 5,
+        `[34] パターン数が5以下 (実際: ${r012!.dependentPatterns?.length})`);
+    // パターン数が少ないので従来の列挙表示
+    const output = formatRouteResult([r012!], input!.parties);
+    const text = output.join('\n');
+    assertIncludes(text, 'パターン', '[34] 少パターンは従来のパターン列挙');
+}
+
+// [35] 要約表示でレンタル候補が表示される
+{
+    const input = parseRouteMessage(`@route
+シナツ ジオツム パオイ スズナ アラクネ
+イサナギ 水タマキ プリシェフィ 水エリコ 水アメス
+スミレ 魔ジータ ヴァンピィ ネネカ エキドナ
+イサナギ アイラ ネフィ アラクネ マホ
+ユイ ソノ ラビリスタ アルノゾ 水アメス`);
+    const routes = findAllRoutes(input!.parties);
+    const output = formatRouteResult(routes, input!.parties);
+    const text = output.join('\n');
+
+    // 要約形式でもレンタル候補の情報（or表示またはレンタル自由）がある
+    // ルート1-2-5のセクションを取得
+    const r125section = text.split('⚔️1→2→5')[1]?.split('⚔️')[0] ?? '';
+    // 各バトル行がある（ボス番号で確認）
+    assertIncludes(r125section, '1', '[35a] ボス1の行がある');
+    assertIncludes(r125section, '2', '[35b] ボス2の行がある');
+    assertIncludes(r125section, '5', '[35c] ボス5の行がある');
 }

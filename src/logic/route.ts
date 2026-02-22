@@ -245,6 +245,9 @@ function formatBattleLine(
     return line;
 }
 
+/** 非独立パターンをパターン列挙する上限 */
+const MAX_DEPENDENT_PATTERNS = 5;
+
 /** 1ルート分をフォーマット */
 function formatSingleRoute(route: ValidRoute, parties: BossParty[], emojis: string[]): string {
     const routeLabel = route.bosses.map(b => b + 1).join('→');
@@ -262,17 +265,30 @@ function formatSingleRoute(route: ValidRoute, parties: BossParty[], emojis: stri
             for (let i = 0; i < 3; i++) {
                 lines.push(formatBattleLine(route.battles[i], parties[route.bosses[i]], emojis, uniquePatterns[0][i]));
             }
-        } else {
+        } else if (uniquePatterns.length <= MAX_DEPENDENT_PATTERNS) {
+            // パターン数が少ない場合は従来通り列挙
             for (let p = 0; p < uniquePatterns.length; p++) {
-                lines.push(`  パターン${String.fromCharCode(65 + p)}:`);
+                lines.push(`  パターン${patternLabel(p)}:`);
                 for (let i = 0; i < 3; i++) {
                     lines.push(`  ${formatBattleLine(route.battles[i], parties[route.bosses[i]], emojis, uniquePatterns[p][i])}`);
                 }
             }
+        } else {
+            // パターン数が多い場合は要約表示（各バトルのレンタル候補 + 通り数）
+            for (let i = 0; i < 3; i++) {
+                lines.push(formatBattleLine(route.battles[i], parties[route.bosses[i]], emojis));
+            }
+            lines.push(`  ※レンタル依存あり（${uniquePatterns.length}通り）`);
         }
     }
 
     return lines.join('\n');
+}
+
+/** パターンラベル生成（A, B, ..., Z, AA, AB, ...） */
+function patternLabel(index: number): string {
+    if (index < 26) return String.fromCharCode(65 + index);
+    return patternLabel(Math.floor(index / 26) - 1) + String.fromCharCode(65 + (index % 26));
 }
 
 /** 非独立パターンから「レンタル自由なバトルの違い」を除去 */
