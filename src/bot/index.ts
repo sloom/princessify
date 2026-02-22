@@ -2,6 +2,7 @@
 import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } from 'discord.js';
 import { Princessify, PartyGuideError } from '../logic/princessify';
 import { parseMochiMessage, formatMochiResult } from '../logic/mochikoshi';
+import { parseRouteMessage, validateInput, findAllRoutes, formatRouteResult, RouteError } from '../logic/route';
 import { ChannelStore } from './channel-store';
 import { createServer } from 'http';
 import * as path from 'path';
@@ -123,6 +124,27 @@ client.on(Events.InteractionCreate, async interaction => {
 client.on(Events.MessageCreate, async message => {
     // 自分自身のメッセージは無視する（無限ループ防止）
     if (message.author.bot) return;
+
+    // @route: 凸ルート計算
+    const routeInput = parseRouteMessage(message.content);
+    if (routeInput) {
+        try {
+            validateInput(routeInput);
+            const routes = findAllRoutes(routeInput.parties);
+            const messages = formatRouteResult(routes, routeInput.parties);
+            for (const msg of messages) {
+                await message.reply(msg);
+            }
+        } catch (error) {
+            if (error instanceof RouteError) {
+                await message.reply(error.message);
+            } else {
+                console.error(error);
+                await message.reply("❌ エラーが発生しました。");
+            }
+        }
+        return;
+    }
 
     // @mochi: 持ち越し時間計算
     const mochiInput = parseMochiMessage(message.content);
