@@ -214,27 +214,9 @@ function formatBattleLine(
 ): string {
     const bossNum = battle.bossIndex + 1;
     const emoji = emojis[battle.bossIndex] ?? '';
-    let line = `${bossNum}ボス${emoji} `;
+    let line = `${bossNum}${emoji} `;
 
     const rentalToShow = rentalName ?? (battle.rentalOptions.length === 1 ? battle.rentalOptions[0] : null);
-
-    const memberParts: string[] = [];
-    for (const member of party.members) {
-        if (rentalToShow && member.name === rentalToShow) {
-            memberParts.push(`(${member.name})`);
-        } else if (!rentalToShow && battle.rentalOptions.length > 1 && !battle.isFreeRental
-            && battle.rentalOptions.includes(member.name)) {
-            memberParts.push(`(${battle.rentalOptions.join(' or ')})`);
-            // 最初のマッチだけ括弧表示、残りはスキップしない（後で重複除去）
-            // → 実際にはor表示は1回だけ出したい。下で処理。
-        } else {
-            memberParts.push(member.name);
-        }
-    }
-
-    // "(X or Y)" の重複除去: 上のロジックを改善
-    // → シンプルに作り直す
-    line = `${bossNum}ボス${emoji} `;
 
     if (battle.isFreeRental && !rentalName) {
         line += party.members.map(m => m.name).join(' ') + ' ※レンタル自由';
@@ -266,7 +248,7 @@ function formatBattleLine(
 /** 1ルート分をフォーマット */
 function formatSingleRoute(route: ValidRoute, parties: BossParty[], emojis: string[]): string {
     const routeLabel = route.bosses.map(b => b + 1).join('→');
-    const lines: string[] = [`⚔️ルート ${routeLabel}`];
+    const lines: string[] = [`⚔️${routeLabel}`];
 
     if (route.isIndependent) {
         for (let i = 0; i < 3; i++) {

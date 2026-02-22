@@ -133,7 +133,7 @@ client.on(Events.MessageCreate, async message => {
             const routes = findAllRoutes(routeInput.parties);
             const messages = formatRouteResult(routes, routeInput.parties);
             for (const msg of messages) {
-                await message.reply(msg);
+                await message.reply(`\`\`\`cs\n${msg}\n\`\`\``);
             }
         } catch (error) {
             if (error instanceof RouteError) {

@@ -461,8 +461,8 @@ console.log('\n=== formatRouteResult テスト ===\n');
     const routes = findAllRoutes(parties);
     const output = formatRouteResult(routes, parties);
     const text = output.join('\n');
-    assertIncludes(text, '1ボス', '[27] ボス番号表示');
-    assertIncludes(text, 'ルート', '[27] ルート表示');
+    assertIncludes(text, '1🐲', '[27] ボス番号+絵文字表示');
+    assertIncludes(text, '⚔️1→', '[27] コンパクトルート表示');
 }
 
 // [28] ルートなし → メッセージ
@@ -556,6 +556,6 @@ console.log('\n=== 統合テスト ===\n');
     const text = output.join('\n');
 
     // ルート1→2→3は非独立（甲:1,2被り、乙:1,3被り）
-    const r123section = text.split('⚔️ルート 1→2→3')[1]?.split('⚔️ルート')[0] ?? '';
+    const r123section = text.split('⚔️1→2→3')[1]?.split('⚔️')[0] ?? '';
     assertIncludes(r123section, 'パターン', '[31] 非独立パターン表示');
 }
