@@ -639,6 +639,7 @@ export class Princessify {
                     .replace(AUTO_ON_REGEX, '')
                     .replace(AUTO_OFF_REGEX, '')
                     .replace(/\b(?:on|off)\b/gi, '')
+                    .replace(STANDALONE_KIRI_REGEX, '')
                     .replace(/\S*(?:セット|解除)/g, '')
                     .replace(/\bSET\S*/gi, '')
                     .replace(/[[\]［］【】(（)）{｛}｝<＜>＞〈〉《》「」『』〔〕]/g, '')

@@ -2457,4 +2457,20 @@ console.log('\n=== 50. キャラ名＋団子の継続行はマージしない ==
     assertIncludes(ekidoLine ?? '', 'エキドナ', '50d: キャラ名＋団子＋AUTO行もマージされない');
 }
 
+// 51: 「切」(AUTO OFF相当)に🌟が付かないこと
+console.log('\n=== 51. 「切」に🌟なし ===');
+
+// 51a: 団子の後の「切」に🌟なし
+{
+    const tool = new Princessify();
+    const input = `〇〇〇〇〇
+1:30　〇ー〇〇〇　切
+1:05　ランファ　〇〇〇〇〇
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+    const line130 = lines.find(l => l.includes('1:30'));
+    assertNotIncludes(line130 ?? '', '🌟', '51a: 「切」に🌟なし');
+}
+
 console.log('\n=== テスト完了 ===\n');
