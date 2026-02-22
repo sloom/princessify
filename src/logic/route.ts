@@ -197,7 +197,7 @@ const DEFAULT_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
 
 export function loadBossEmojis(): string[] {
     try {
-        const filePath = path.join(__dirname, '../config/boss-emojis.json');
+        const filePath = path.join(process.cwd(), 'src/config/boss-emojis.json');
         const data = fs.readFileSync(filePath, 'utf-8');
         const emojis = JSON.parse(data);
         if (Array.isArray(emojis) && emojis.length >= 5) return emojis;
