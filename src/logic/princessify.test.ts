@@ -2336,4 +2336,54 @@ console.log('\n=== 48. 【オートON/OFF】のみの行に🌟なし ===');
     assertIncludes(line116 ?? '', '🌟', '48d: 手動指示テキスト＋【オートON】→🌟あり');
 }
 
+// 49: SET{キャラ名}/{名前}セット/{名前}解除 を含む行に🌟が付かないこと
+
+// 49a: パーティなし既存モードで SET{キャラ名} に🌟なし
+{
+    const tool = new Princessify();
+    const input = `元TL：
+OOOOO  Auto on
+1:16   マホ   XOXXO
+1:09   アイラ   XOXOX
+0:02   ネフィ   SETスミレ   OOOXO
+0:01   BOSSUB   SETアイラ   OOOOO
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    const line002 = lines.find(l => l.includes('0:02') && l.includes('ネフィ'));
+    assertNotIncludes(line002 ?? '', '🌟', '49a: SETスミレを含む行に🌟なし');
+
+    const line001 = lines.find(l => l.includes('0:01') && l.includes('BOSSUB'));
+    assertNotIncludes(line001 ?? '', '🌟', '49b: SETアイラを含む行に🌟なし');
+}
+
+// 49c: パーティあり既存モードで {名前}セット に🌟なし
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:16   甲   XOXXO
+0:02   丙   甲セット   OOOXO
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+    const line002 = lines.find(l => l.includes('0:02') && l.includes('丙'));
+    assertNotIncludes(line002 ?? '', '🌟', '49c: {名前}セットを含む行に🌟なし');
+}
+
+// 49d: パーティあり既存モードで {名前}解除 に🌟なし
+{
+    const tool = new Princessify();
+    const input = `@dango 甲 乙 丙 丁 戊
+
+1:16   甲   XOXXO
+0:02   丙   甲解除   OOOXO
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+    const line002 = lines.find(l => l.includes('0:02') && l.includes('丙'));
+    assertNotIncludes(line002 ?? '', '🌟', '49d: {名前}解除を含む行に🌟なし');
+}
+
 console.log('\n=== テスト完了 ===\n');
