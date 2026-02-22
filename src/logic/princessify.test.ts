@@ -2386,4 +2386,75 @@ OOOOO  Auto on
     assertNotIncludes(line002 ?? '', '🌟', '49d: {名前}解除を含む行に🌟なし');
 }
 
+// 50: キャラ名＋団子の継続行がマージされないこと
+console.log('\n=== 50. キャラ名＋団子の継続行はマージしない ===');
+
+// 50a: キャラ名＋団子の行が別行として出力に残ること
+{
+    const tool = new Princessify();
+    const input = `〇－〇〇〇　オートOFF
+1:05 ランファ　〇〇〇〇〇
+     エキドナ　〇－〇〇〇
+0:51 バーン　　〇〇〇〇〇
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    // ランファ行が出力に存在すること
+    const ranfaLine = lines.find(l => l.includes('1:05') && l.includes('ランファ'));
+    assertIncludes(ranfaLine ?? '', 'ランファ', '50a-1: ランファ行が出力に存在');
+
+    // エキドナ行が出力に存在すること（マージされていないこと）
+    const ekidoLine = lines.find(l => l.includes('エキドナ'));
+    assertIncludes(ekidoLine ?? '', 'エキドナ', '50a-2: エキドナ行が出力に存在（マージされない）');
+}
+
+// 50b: ランファの団子がエキドナの団子で上書きされないこと
+{
+    const tool = new Princessify();
+    const input = `〇〇〇〇〇
+1:05 ランファ　〇〇〇〇〇
+     エキドナ　〇－〇〇〇
+0:51 バーン　　〇〇〇〇〇
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    const ranfaLine = lines.find(l => l.includes('1:05') && l.includes('ランファ'));
+    // ランファの団子は全〇 → 前と同じなので差分なし（ー表示になるはず）
+    // 重要なのは「❌」が含まれないこと（エキドナの〇－〇〇〇がマージされていない証拠）
+    assertNotIncludes(ranfaLine ?? '', '❌', '50b: ランファの団子にエキドナの❌が混入しない');
+}
+
+// 50c: 純粋な団子のみの継続行は従来通りマージされること
+{
+    const tool = new Princessify();
+    const input = `〇〇〇〇〇
+1:05 ランファ
+     〇〇〇〇〇
+0:51 バーン　　〇〇〇〇〇
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    // ランファ行に団子が含まれている（マージされている）こと
+    const ranfaLine = lines.find(l => l.includes('1:05') && l.includes('ランファ'));
+    assertIncludes(ranfaLine ?? '', '〇', '50c: 団子のみ継続行はランファ行にマージされる');
+}
+
+// 50d: キャラ名＋団子＋AUTO指示の継続行もマージされないこと
+{
+    const tool = new Princessify();
+    const input = `〇〇〇〇〇
+0:51 バーン　　〇〇〇〇〇
+     エキドナ　〇－〇〇〇　オートON
+0:17 スミレ　　〇〇－〇〇
+`;
+    const result = tool.convert(input)!;
+    const lines = result.split('\n');
+
+    const ekidoLine = lines.find(l => l.includes('エキドナ'));
+    assertIncludes(ekidoLine ?? '', 'エキドナ', '50d: キャラ名＋団子＋AUTO行もマージされない');
+}
+
 console.log('\n=== テスト完了 ===\n');

@@ -375,6 +375,7 @@ export class Princessify {
             if (hasTimeNearStart || hasUserDango || actorIndex !== -1) {
                 // 複数行団子: 次行に団子やAUTO指示がないか先読み
                 const continuationLines: number[] = [];
+                const subEntries: TimelineEntry[] = [];
                 let nextIdx = lineIndex + 1;
                 while (nextIdx < lines.length) {
                     const nextTrimmed = lines[nextIdx].trim();
@@ -383,20 +384,61 @@ export class Princessify {
 
                     let isContinuation = false;
 
+                    // 団子を検出し、団子の前にキャラ名があるか判定
+                    let dangoFound = false;
+                    let dangoState: boolean[] = [false, false, false, false, false];
+                    let textBeforeDango = '';
+
                     // 括弧付き団子チェック
                     const contBracket = nextTrimmed.match(this.bracketedDangoRegex);
                     if (contBracket) {
-                        userState = this.parseDangoState(contBracket[1]);
-                        hasUserDango = true;
-                        isContinuation = true;
+                        dangoFound = true;
+                        dangoState = this.parseDangoState(contBracket[1]);
+                        const dangoPos = nextTrimmed.indexOf(contBracket[0]);
+                        textBeforeDango = nextTrimmed.substring(0, dangoPos).trim();
                     } else {
                         // 括弧なし団子チェック
                         const contNoBracket = nextTrimmed.match(this.noBracketDangoRegex);
                         if (contNoBracket) {
-                            userState = this.parseDangoState(contNoBracket[1]);
-                            hasUserDango = true;
-                            isContinuation = true;
+                            dangoFound = true;
+                            dangoState = this.parseDangoState(contNoBracket[1]);
+                            const dangoPos = nextTrimmed.indexOf(contNoBracket[0]);
+                            textBeforeDango = nextTrimmed.substring(0, dangoPos).trim();
                         }
+                    }
+
+                    if (dangoFound && textBeforeDango) {
+                        // キャラ名＋団子 → 別エントリとして収集（マージしない）
+                        let subActorIndex = -1;
+                        let subActorName = '';
+                        for (let j = 0; j < this.party.length; j++) {
+                            if (nextTrimmed.includes(this.party[j])) {
+                                subActorIndex = j;
+                                subActorName = this.party[j];
+                                break;
+                            }
+                        }
+                        const subAuto = detectAutoState(nextTrimmed);
+                        subEntries.push({
+                            lineIndex: nextIdx,
+                            originalText: lines[nextIdx],
+                            timeStr,
+                            actorIndex: subActorIndex,
+                            actorName: subActorName,
+                            userState: dangoState,
+                            hasUserDango: true,
+                            autoStateChange: subAuto,
+                            continuationLines: []
+                        });
+                        nextIdx++;
+                        continue;
+                    }
+
+                    if (dangoFound) {
+                        // 純粋な団子のみ → 従来通りマージ
+                        userState = dangoState;
+                        hasUserDango = true;
+                        isContinuation = true;
                     }
 
                     // AUTO指示チェック
@@ -427,6 +469,8 @@ export class Princessify {
                     autoStateChange,
                     continuationLines
                 });
+                // サブエントリ（キャラ名＋団子の別行）を親の後に追加
+                entries.push(...subEntries);
                 lineIndex = nextIdx - 1;
             }
         }
