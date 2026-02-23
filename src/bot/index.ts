@@ -11,6 +11,71 @@ import dotenv from 'dotenv';
 // .envファイルを読み込む
 dotenv.config();
 
+// Discord メッセージ上限
+const DISCORD_MAX_LENGTH = 2000;
+
+/**
+ * 長い結果テキストをDiscordの文字数上限に収まるよう行単位で分割する。
+ * 各チャンクは ```cs ... ``` コードブロックで囲まれ、最初のチャンクにのみ greeting を付与。
+ */
+export function splitForDiscord(body: string, greeting: string): string[] {
+    const codeOpen = '```cs\n';
+    const codeClose = '\n```';
+
+    // 1チャンク目のオーバーヘッド: greeting\n```cs\n ... \n```
+    const firstOverhead = greeting.length + 1 + codeOpen.length + codeClose.length;
+    // 2チャンク目以降: ```cs\n ... \n```
+    const laterOverhead = codeOpen.length + codeClose.length;
+
+    const firstMax = DISCORD_MAX_LENGTH - firstOverhead;
+    const laterMax = DISCORD_MAX_LENGTH - laterOverhead;
+
+    // 分割不要
+    if (body.length <= firstMax) {
+        return [`${greeting}\n${codeOpen}${body}${codeClose}`];
+    }
+
+    const lines = body.split('\n');
+    const chunks: string[] = [];
+    let currentLines: string[] = [];
+    let currentLen = 0;
+    let isFirst = true;
+
+    for (const line of lines) {
+        const maxLen = isFirst ? firstMax : laterMax;
+        // +1 は改行文字分（最初の行以外）
+        const addLen = currentLines.length === 0 ? line.length : line.length + 1;
+
+        if (currentLen + addLen > maxLen && currentLines.length > 0) {
+            // チャンクを確定
+            const content = currentLines.join('\n');
+            if (isFirst) {
+                chunks.push(`${greeting}\n${codeOpen}${content}${codeClose}`);
+                isFirst = false;
+            } else {
+                chunks.push(`${codeOpen}${content}${codeClose}`);
+            }
+            currentLines = [line];
+            currentLen = line.length;
+        } else {
+            currentLines.push(line);
+            currentLen += addLen;
+        }
+    }
+
+    // 残りを最後のチャンクに
+    if (currentLines.length > 0) {
+        const content = currentLines.join('\n');
+        if (isFirst) {
+            chunks.push(`${greeting}\n${codeOpen}${content}${codeClose}`);
+        } else {
+            chunks.push(`${codeOpen}${content}${codeClose}`);
+        }
+    }
+
+    return chunks;
+}
+
 // Botクライアントの作成
 const client = new Client({
     intents: [
@@ -171,7 +236,10 @@ client.on(Events.MessageCreate, async message => {
 
             // 結果を返信（モード別ランダムメッセージ + コードブロック）
             const greeting = pickMessage(tool.lastMode ?? 'existing');
-            await message.reply(`${greeting}\n\`\`\`cs\n${result}\n\`\`\``);
+            const chunks = splitForDiscord(result, greeting);
+            for (const chunk of chunks) {
+                await message.reply(chunk);
+            }
 
         } catch (error) {
             if (error instanceof PartyGuideError) {
