@@ -11,8 +11,8 @@ import dotenv from 'dotenv';
 // .envファイルを読み込む
 dotenv.config();
 
-// Discord メッセージ上限
-const DISCORD_MAX_LENGTH = 2000;
+// Discord メッセージ上限（安全マージンを含む）
+const DISCORD_MAX_LENGTH = 1950;
 
 /**
  * 長い結果テキストをDiscordの文字数上限に収まるよう行単位で分割する。
@@ -237,6 +237,7 @@ client.on(Events.MessageCreate, async message => {
             // 結果を返信（モード別ランダムメッセージ + コードブロック）
             const greeting = pickMessage(tool.lastMode ?? 'existing');
             const chunks = splitForDiscord(result, greeting);
+            console.log(`📤 ${chunks.length}チャンク送信 (${chunks.map(c => c.length).join(', ')}文字)`);
             for (const chunk of chunks) {
                 await message.reply(chunk);
             }
