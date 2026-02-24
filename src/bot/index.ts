@@ -3,7 +3,7 @@ import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, P
 import { Princessify, PartyGuideError } from '../logic/princessify';
 import { parseMochiMessage, formatMochiResult } from '../logic/mochikoshi';
 import { parseRouteMessage, validateInput, findAllRoutes, formatRouteResult, RouteError } from '../logic/route';
-import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, getGameDayStart, GachaResult } from '../logic/landsol-cup';
+import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, getGameDayStart, getGameDayEnd, parseGameDate, GachaResult } from '../logic/landsol-cup';
 import { ChannelStore } from './channel-store';
 import { createServer } from 'http';
 import * as path from 'path';
@@ -149,6 +149,10 @@ client.once(Events.ClientReady, async c => {
                 opt.setName('detail')
                     .setDescription('等の内訳を表示する')
                     .setRequired(false))
+            .addStringOption(opt =>
+                opt.setName('date')
+                    .setDescription('集計対象日（例: 2/24, 2026/2/24）')
+                    .setRequired(false))
     ];
     try {
         await rest.put(Routes.applicationCommands(c.user.id), { body: commands.map(cmd => cmd.toJSON()) });
@@ -288,6 +292,7 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
     const mode = (interaction.options.getString('mode') ?? 'all') as 'top' | 'bottom' | 'all';
     const count = interaction.options.getInteger('count') ?? undefined;
     const detail = interaction.options.getBoolean('detail') ?? false;
+    const dateStr = interaction.options.getString('date') ?? null;
 
     const channel = interaction.channel;
     if (!channel || !('messages' in channel)) {
@@ -299,16 +304,30 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
     await interaction.deferReply();
 
     try {
+        // 日付パース（指定なしの場合は今日のゲーム日）
+        const parsedDate = parseGameDate(dateStr);
+        if (dateStr && !parsedDate) {
+            await interaction.editReply('⛔ 日付の形式が不正です。例: 2/24 または 2026/2/24');
+            return;
+        }
+
         const now = new Date();
-        const gameDayStart = getGameDayStart(now);
+        const gameDayStart = parsedDate ? getGameDayStart(parsedDate) : getGameDayStart(now);
+        const gameDayEnd = getGameDayEnd(gameDayStart);
+
         const afterSnowflake = SnowflakeUtil.generate({ timestamp: gameDayStart.getTime() }).toString();
+        const beforeSnowflake = SnowflakeUtil.generate({ timestamp: gameDayEnd.getTime() }).toString();
 
         // メッセージをページネーションで取得
         const allMessages: Message[] = [];
         let lastId: string | undefined;
 
         while (true) {
-            const options: { limit: number; after: string } = { limit: 100, after: lastId ?? afterSnowflake };
+            const options: { limit: number; after: string; before: string } = {
+                limit: 100,
+                after: lastId ?? afterSnowflake,
+                before: beforeSnowflake,
+            };
             const fetched: Collection<string, Message> = await (channel as TextChannel).messages.fetch(options);
             if (fetched.size === 0) break;
 
@@ -358,13 +377,14 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
         }
 
         if (resultMap.size === 0) {
-            await interaction.editReply('ℹ️ 本日のランドソル杯の結果が見つかりませんでした。');
+            const dateLabel = dateStr ?? '本日';
+            await interaction.editReply(`ℹ️ ${dateLabel}のランドソル杯の結果が見つかりませんでした。`);
             return;
         }
 
         const results = [...resultMap.values()];
         const ranking = buildRanking(results);
-        const output = formatRanking(ranking, mode, count, now, detail);
+        const output = formatRanking(ranking, mode, count, gameDayStart, detail);
 
         await interaction.editReply(output);
     } catch (error) {

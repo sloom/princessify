@@ -137,9 +137,11 @@ export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 
         display = entries;
     }
 
-    // 日付ヘッダー
+    // 日付ヘッダー（JST明示変換 — UTCサーバーでも正しい日付を表示）
+    const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
     const d = date ?? new Date();
-    let header = `🏆 ランドソル杯（${d.getMonth() + 1}/${d.getDate()}）`;
+    const jstD = new Date(d.getTime() + JST_OFFSET_MS);
+    let header = `🏆 ランドソル杯（${jstD.getUTCMonth() + 1}/${jstD.getUTCDate()}）`;
     if (mode === 'bottom') {
         header += 'ワーストランキング';
     }
@@ -169,6 +171,46 @@ export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 
     return result;
 }
 
+// --- 日付パース ---
+
+const GAME_DATE_MD = /^(\d{1,2})\/(\d{1,2})$/;           // M/D
+const GAME_DATE_YMD = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/; // YYYY/M/D
+
+export function parseGameDate(input: string | null, referenceYear?: number): Date | null {
+    if (!input) return null;
+
+    const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+    let year: number, month: number, day: number;
+
+    const mdMatch = input.match(GAME_DATE_MD);
+    const ymdMatch = input.match(GAME_DATE_YMD);
+
+    if (ymdMatch) {
+        year = parseInt(ymdMatch[1], 10);
+        month = parseInt(ymdMatch[2], 10);
+        day = parseInt(ymdMatch[3], 10);
+    } else if (mdMatch) {
+        year = referenceYear ?? new Date().getUTCFullYear();
+        month = parseInt(mdMatch[1], 10);
+        day = parseInt(mdMatch[2], 10);
+    } else {
+        return null;
+    }
+
+    // バリデーション: 月1-12, 日1-31
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+    // Dateコンストラクタで実際に有効な日付か確認（JST 12:00 を構築）
+    const utcMs = Date.UTC(year, month - 1, day, 12, 0, 0, 0) - JST_OFFSET_MS;
+    const d = new Date(utcMs);
+
+    // 月がずれていないか確認（例: 2/30 → 3/2 になる場合を弾く）
+    const jstD = new Date(d.getTime() + JST_OFFSET_MS);
+    if (jstD.getUTCMonth() !== month - 1 || jstD.getUTCDate() !== day) return null;
+
+    return d;
+}
+
 // --- ゲーム日境界 ---
 
 export function getGameDayStart(now: Date): Date {
@@ -188,4 +230,8 @@ export function getGameDayStart(now: Date): Date {
 
     // JST 05:00 を UTC に変換して返す
     return new Date(Date.UTC(year, month, day, 5, 0, 0, 0) - JST_OFFSET_MS);
+}
+
+export function getGameDayEnd(gameDayStart: Date): Date {
+    return new Date(gameDayStart.getTime() + 24 * 60 * 60 * 1000);
 }

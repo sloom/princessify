@@ -1,7 +1,7 @@
 // src/logic/landsol-cup.test.ts
 // ランドソル杯（ランキング）テスト
 
-import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, formatRollBreakdown, getGameDayStart, detectDaysMismatch, GEMS_TABLE } from './landsol-cup';
+import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, formatRollBreakdown, getGameDayStart, getGameDayEnd, parseGameDate, detectDaysMismatch, GEMS_TABLE } from './landsol-cup';
 
 // --- テストユーティリティ ---
 
@@ -491,4 +491,126 @@ console.log('\n=== フェーズ8: formatRollBreakdown + detail ===');
 {
     const out = formatRanking(testEntries, 'bottom', 2, testDate, true);
     assertIncludes(out, '①0 ②3 ③4 ④0', '41a. bottomモードでも内訳あり（丁）');
+}
+
+// ============================================================
+// フェーズ9: parseGameDate
+// ============================================================
+console.log('\n=== フェーズ9: parseGameDate ===');
+
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+// ヘルパー: DateからJST時刻を読み取る
+function jstHour(d: Date): number { return new Date(d.getTime() + JST_OFFSET_MS).getUTCHours(); }
+function jstMonth(d: Date): number { return new Date(d.getTime() + JST_OFFSET_MS).getUTCMonth() + 1; }
+function jstDay(d: Date): number { return new Date(d.getTime() + JST_OFFSET_MS).getUTCDate(); }
+function jstYear(d: Date): number { return new Date(d.getTime() + JST_OFFSET_MS).getUTCFullYear(); }
+
+// 42. M/D形式: '2/24' → JST 2/24 12:00
+{
+    const d = parseGameDate('2/24', 2026);
+    assert(d !== null, '42a. 2/24 はnullでない');
+    assertEqual(jstMonth(d!), 2, '42b. 月=2');
+    assertEqual(jstDay(d!), 24, '42c. 日=24');
+    assertEqual(jstHour(d!), 12, '42d. JST 12:00');
+    assertEqual(jstYear(d!), 2026, '42e. 年=2026');
+}
+
+// 43. M/D形式: '12/31'
+{
+    const d = parseGameDate('12/31', 2026);
+    assert(d !== null, '43a. 12/31 はnullでない');
+    assertEqual(jstMonth(d!), 12, '43b. 月=12');
+    assertEqual(jstDay(d!), 31, '43c. 日=31');
+}
+
+// 44. YYYY/M/D形式: '2026/2/24'
+{
+    const d = parseGameDate('2026/2/24');
+    assert(d !== null, '44a. 2026/2/24 はnullでない');
+    assertEqual(jstYear(d!), 2026, '44b. 年=2026');
+    assertEqual(jstMonth(d!), 2, '44c. 月=2');
+    assertEqual(jstDay(d!), 24, '44d. 日=24');
+    assertEqual(jstHour(d!), 12, '44e. JST 12:00');
+}
+
+// 45. YYYY/M/D形式: '2026/12/31'
+{
+    const d = parseGameDate('2026/12/31');
+    assert(d !== null, '45a. 2026/12/31 はnullでない');
+    assertEqual(jstYear(d!), 2026, '45b. 年=2026');
+    assertEqual(jstMonth(d!), 12, '45c. 月=12');
+    assertEqual(jstDay(d!), 31, '45d. 日=31');
+}
+
+// 46. null → null
+{
+    assertEqual(parseGameDate(null), null, '46. null → null');
+}
+
+// 47. 空文字 → null
+{
+    assertEqual(parseGameDate(''), null, '47. 空文字 → null');
+}
+
+// 48. 不正文字列 → null
+{
+    assertEqual(parseGameDate('abc'), null, '48. abc → null');
+}
+
+// 49. 月が13 → null
+{
+    assertEqual(parseGameDate('13/1'), null, '49. 13/1 → null');
+}
+
+// 50. 日が0 → null
+{
+    assertEqual(parseGameDate('2/0'), null, '50. 2/0 → null');
+}
+
+// 51. Integration: getGameDayStart(parseGameDate('2/24')) → JST 2/24 5:00
+{
+    const d = parseGameDate('2/24', 2026);
+    const start = getGameDayStart(d!);
+    assertEqual(jstMonth(start), 2, '51a. ゲーム日 月=2');
+    assertEqual(jstDay(start), 24, '51b. ゲーム日 日=24');
+    assertEqual(jstHour(start), 5, '51c. ゲーム日 5:00');
+}
+
+// ============================================================
+// フェーズ10: getGameDayEnd
+// ============================================================
+console.log('\n=== フェーズ10: getGameDayEnd ===');
+
+// 52. gameDayStart(2/24 JST 5:00) → 2/25 JST 5:00（+24h）
+{
+    const start = getGameDayStart(parseGameDate('2/24', 2026)!);
+    const end = getGameDayEnd(start);
+    assertEqual(jstMonth(end), 2, '52a. end 月=2');
+    assertEqual(jstDay(end), 25, '52b. end 日=25');
+    assertEqual(jstHour(end), 5, '52c. end 5:00');
+    assertEqual(end.getTime() - start.getTime(), 24 * 60 * 60 * 1000, '52d. 差分=24h');
+}
+
+// ============================================================
+// フェーズ11: formatRanking JSTヘッダー修正
+// ============================================================
+console.log('\n=== フェーズ11: formatRanking JSTヘッダー ===');
+
+// 53. gameDayStart (UTC 2/23 20:00 = JST 2/24 5:00) を渡す → ヘッダーに "2/24"
+{
+    const gameDayStart = getGameDayStart(parseGameDate('2/24', 2026)!);
+    // gameDayStart は UTC 2/23 20:00 (= JST 2/24 5:00)
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: [1,1,1,1,1,1,1] },
+    ];
+    const out = formatRanking(entries, 'all', undefined, gameDayStart);
+    assertIncludes(out, '2/24', '53a. ヘッダーに2/24（JST日付）');
+    assert(!out.includes('2/23'), '53b. 2/23（UTC日付）は含まない');
+}
+
+// 54. 既存テストのtestDate (new Date(2026, 1, 24)) が引き続きパス
+{
+    const out = formatRanking(testEntries, 'all', undefined, testDate);
+    assertIncludes(out, '2/24', '54a. 既存testDateでも2/24表示');
 }
