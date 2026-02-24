@@ -318,9 +318,9 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
         }
 
         // 各ユーザーの最新メッセージからガチャ結果を抽出
-        // Map<userId, GachaResult> で後勝ち（=最新が上書き）
+        // Map<userId, {rolls, msg}> で後勝ち（=最新が上書き）
         // メッセージは古い順に並んでいるので、後のほうが新しい
-        const resultMap = new Map<string, GachaResult>();
+        const rollMap = new Map<string, { rolls: number[]; msg: Message }>();
 
         for (const msg of allMessages) {
             if (msg.author.bot) continue;
@@ -328,9 +328,24 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
             const rolls = parseGachaRolls(msg.content);
             if (!rolls) continue;
 
-            const displayName = msg.member?.displayName ?? msg.author.displayName ?? msg.author.username;
-            resultMap.set(msg.author.id, {
-                userId: msg.author.id,
+            rollMap.set(msg.author.id, { rolls, msg });
+        }
+
+        // サーバーニックネームを一括取得してGachaResultを構築
+        const resultMap = new Map<string, GachaResult>();
+        for (const [userId, { rolls, msg }] of rollMap) {
+            let displayName = msg.member?.displayName;
+            if (!displayName && interaction.guild) {
+                try {
+                    const member = await interaction.guild.members.fetch(userId);
+                    displayName = member.displayName;
+                } catch {
+                    // メンバーが退出済み等の場合はフォールバック
+                }
+            }
+            displayName ??= msg.author.displayName ?? msg.author.username;
+            resultMap.set(userId, {
+                userId,
                 displayName,
                 rolls,
                 totalGems: computeTotalGems(rolls),
