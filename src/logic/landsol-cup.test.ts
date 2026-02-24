@@ -1,7 +1,7 @@
 // src/logic/landsol-cup.test.ts
 // ランドソル杯（ランキング）テスト
 
-import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, getGameDayStart, detectDaysMismatch, GEMS_TABLE } from './landsol-cup';
+import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, formatRollBreakdown, getGameDayStart, detectDaysMismatch, GEMS_TABLE } from './landsol-cup';
 
 // --- テストユーティリティ ---
 
@@ -437,4 +437,58 @@ console.log('\n=== フェーズ7: formatRanking（日数不一致警告付き）
     assertIncludes(out, '⚠️', '34b. 警告マーク');
     assertIncludes(out, '丙', '34c. 不一致メンバー名');
     assertIncludes(out, '9日', '34d. 不一致の日数');
+}
+
+// ============================================================
+// フェーズ8: formatRollBreakdown + detail オプション
+// ============================================================
+console.log('\n=== フェーズ8: formatRollBreakdown + detail ===');
+
+// 35. formatRollBreakdown: 基本的な集計
+{
+    // [1,1,2,3,1,4,2,1,3,2] → ①4 ②3 ③2 ④1
+    const out = formatRollBreakdown([1,1,2,3,1,4,2,1,3,2]);
+    assertEqual(out, '①4 ②3 ③2 ④1', '35a. 基本的な集計');
+}
+
+// 36. formatRollBreakdown: 0回の等がある場合
+{
+    // [1,1,1] → ①3 ②0 ③0 ④0
+    const out = formatRollBreakdown([1,1,1]);
+    assertEqual(out, '①3 ②0 ③0 ④0', '36a. 0回の等がある場合');
+}
+
+// 37. formatRollBreakdown: 全て同じ等
+{
+    const out = formatRollBreakdown([4,4,4,4,4]);
+    assertEqual(out, '①0 ②0 ③0 ④5', '37a. 全て4等');
+}
+
+// 38. formatRollBreakdown: 空配列
+{
+    const out = formatRollBreakdown([]);
+    assertEqual(out, '①0 ②0 ③0 ④0', '38a. 空配列');
+}
+
+// 39. formatRanking + detail=true: 各行に内訳が付く
+{
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '乙', totalGems: 3500, rolls: [1,1,1,1,1,1,1] },
+        { rank: 2, displayName: '甲', totalGems: 2800, rolls: [2,2,2,2,3,3,3] },
+    ];
+    const out = formatRanking(entries, 'all', undefined, testDate, true);
+    assertIncludes(out, '①7 ②0 ③0 ④0', '39a. 乙の内訳');
+    assertIncludes(out, '①0 ②4 ③3 ④0', '39b. 甲の内訳');
+}
+
+// 40. formatRanking + detail=false（デフォルト）: 内訳なし
+{
+    const out = formatRanking(testEntries, 'all', undefined, testDate);
+    assertNotIncludes(out, '①', '40a. デフォルトでは内訳なし');
+}
+
+// 41. formatRanking + detail=true + bottomモード
+{
+    const out = formatRanking(testEntries, 'bottom', 2, testDate, true);
+    assertIncludes(out, '①0 ②3 ③4 ④0', '41a. bottomモードでも内訳あり（丁）');
 }

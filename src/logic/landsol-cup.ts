@@ -107,9 +107,21 @@ export function detectDaysMismatch(entries: RankingEntry[]): { standardDays: num
     return { standardDays, mismatches };
 }
 
+// --- 内訳フォーマット ---
+
+const CIRCLED_NUMBERS = ['①', '②', '③', '④'];
+
+export function formatRollBreakdown(rolls: number[]): string {
+    const counts = [0, 0, 0, 0]; // index 0=1等, 1=2等, 2=3等, 3=4等
+    for (const r of rolls) {
+        if (r >= 1 && r <= 4) counts[r - 1]++;
+    }
+    return counts.map((c, i) => `${CIRCLED_NUMBERS[i]}${c}`).join(' ');
+}
+
 // --- フォーマット ---
 
-export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 'all', count?: number, date?: Date): string {
+export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 'all', count?: number, date?: Date, detail?: boolean): string {
     const MEDALS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
     const WORST_MEDALS: Record<number, string> = { 1: '💀', 2: '🤡', 3: '🫠' };
 
@@ -135,13 +147,14 @@ export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 
     // 各行のフォーマット（メダルなし時は全角スペースで絵文字幅に合わせる）
     const lines = display.map((e, i) => {
         const gems = e.totalGems.toLocaleString('en-US');
+        const breakdown = detail ? ` (${formatRollBreakdown(e.rolls)})` : '';
         if (mode === 'bottom') {
             const worstRank = i + 1;
             const medal = WORST_MEDALS[worstRank] ?? '\u3000';
-            return `${medal} ${worstRank}位 ${e.displayName} — 💎${gems}`;
+            return `${medal} ${worstRank}位 ${e.displayName} — 💎${gems}${breakdown}`;
         }
         const medal = MEDALS[e.rank] ?? '\u3000';
-        return `${medal} ${e.rank}位 ${e.displayName} — 💎${gems}`;
+        return `${medal} ${e.rank}位 ${e.displayName} — 💎${gems}${breakdown}`;
     });
 
     let result = `${header}\n\n${lines.join('\n')}`;

@@ -145,6 +145,10 @@ client.once(Events.ClientReady, async c => {
                     .setRequired(false)
                     .setMinValue(1)
                     .setMaxValue(50))
+            .addBooleanOption(opt =>
+                opt.setName('detail')
+                    .setDescription('等の内訳を表示する')
+                    .setRequired(false))
     ];
     try {
         await rest.put(Routes.applicationCommands(c.user.id), { body: commands.map(cmd => cmd.toJSON()) });
@@ -283,6 +287,7 @@ client.on(Events.MessageCreate, async message => {
 async function handleLandsolCup(interaction: import('discord.js').ChatInputCommandInteraction) {
     const mode = (interaction.options.getString('mode') ?? 'all') as 'top' | 'bottom' | 'all';
     const count = interaction.options.getInteger('count') ?? undefined;
+    const detail = interaction.options.getBoolean('detail') ?? false;
 
     const channel = interaction.channel;
     if (!channel || !('messages' in channel)) {
@@ -359,7 +364,7 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
 
         const results = [...resultMap.values()];
         const ranking = buildRanking(results);
-        const output = formatRanking(ranking, mode, count, now);
+        const output = formatRanking(ranking, mode, count, now, detail);
 
         await interaction.editReply(output);
     } catch (error) {
