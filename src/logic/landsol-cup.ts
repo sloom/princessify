@@ -126,18 +126,21 @@ export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 
 
     // 日付ヘッダー
     const d = date ?? new Date();
-    const header = `🏆 ランドソル杯（${d.getMonth() + 1}/${d.getDate()}）`;
+    let header = `🏆 ランドソル杯（${d.getMonth() + 1}/${d.getDate()}）`;
+    if (mode === 'bottom') {
+        header += 'ワーストランキング';
+    }
 
-    // 各行のフォーマット
+    // 各行のフォーマット（メダルなし時は全角スペースで絵文字幅に合わせる）
     const lines = display.map((e, i) => {
         const gems = e.totalGems.toLocaleString('en-US');
         if (mode === 'bottom') {
             const worstRank = i + 1;
-            const medal = WORST_MEDALS[worstRank] ?? '  ';
-            return `${medal} ワースト${worstRank}位 ${e.displayName}  💎${gems}`;
+            const medal = WORST_MEDALS[worstRank] ?? '\u3000';
+            return `${medal} ${worstRank}位 ${e.displayName} — 💎${gems}`;
         }
-        const medal = MEDALS[e.rank] ?? '  ';
-        return `${medal} ${e.rank}位 ${e.displayName}  💎${gems}`;
+        const medal = MEDALS[e.rank] ?? '\u3000';
+        return `${medal} ${e.rank}位 ${e.displayName} — 💎${gems}`;
     });
 
     let result = `${header}\n\n${lines.join('\n')}`;

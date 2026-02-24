@@ -227,13 +227,14 @@ const testEntries: import('./landsol-cup').RankingEntry[] = [
     assertIncludes(out, '🥉', '19c. 3位にメダル🥉');
 }
 
-// 20. 4人以上 → 4位以降はスペースインデント
+// 20. 4人以上 → 4位以降は全角スペースインデント
 {
     const out = formatRanking(testEntries, 'all', undefined, testDate);
     assertIncludes(out, '🥇', '20a. 1位にメダル');
     assertNotIncludes(out, '🏅', '20b. 4位にメダルなし');
-    // 4位の行が存在する
     assertIncludes(out, '4位', '20c. 4位の行がある');
+    // 4位は全角スペースでインデント
+    assertIncludes(out, '\u3000 4位', '20d. 4位に全角スペースインデント');
 }
 
 // 21. mode='top', count=2 → 上位2件のみ
@@ -251,24 +252,26 @@ const testEntries: import('./landsol-cup').RankingEntry[] = [
     assertIncludes(out, '甲', '22b. bottom2に甲がいる');
     assertIncludes(out, '丁', '22c. bottom2に丁がいる');
     // ワースト絵文字
-    assertIncludes(out, '💀', '22d. ワースト1位に💀');
-    assertIncludes(out, '🤡', '22e. ワースト2位に🤡');
-    // ワーストN位ラベル
-    assertIncludes(out, 'ワースト1位', '22f. ワースト1位ラベル');
-    assertIncludes(out, 'ワースト2位', '22g. ワースト2位ラベル');
+    assertIncludes(out, '💀', '22d. 1位に💀');
+    assertIncludes(out, '🤡', '22e. 2位に🤡');
+    // ヘッダーに「ワーストランキング」
+    assertIncludes(out, 'ワーストランキング', '22f. ヘッダーにワーストランキング');
+    // 各行には「ワースト」なし（N位のみ）
+    assertIncludes(out, '💀 1位', '22g. 各行はN位のみ');
+    assertNotIncludes(out, 'ワースト1位', '22h. 各行にワーストなし');
     // 逆順（最下位が先頭）
     const idx丁 = out.indexOf('丁');
     const idx甲 = out.indexOf('甲');
-    assert(idx丁 < idx甲, '22h. 逆順: 丁（最下位）が甲より先');
+    assert(idx丁 < idx甲, '22i. 逆順: 丁（最下位）が甲より先');
     // 通常メダルは出ない
-    assertNotIncludes(out, '🥇', '22i. 通常メダルは出ない');
+    assertNotIncludes(out, '🥇', '22j. 通常メダルは出ない');
 }
 
-// 22.5. mode='bottom', count=3 → 🫠がワースト3位に付く
+// 22.5. mode='bottom', count=3 → 🫠が3位に付く
 {
     const out = formatRanking(testEntries, 'bottom', 3, testDate);
-    assertIncludes(out, '🫠', '22.5a. ワースト3位に🫠');
-    assertIncludes(out, 'ワースト3位', '22.5b. ワースト3位ラベル');
+    assertIncludes(out, '🫠', '22.5a. 3位に🫠');
+    assertIncludes(out, '🫠 3位', '22.5b. 各行はN位のみ');
 }
 
 // 23. mode='all' → 全件
@@ -278,10 +281,10 @@ const testEntries: import('./landsol-cup').RankingEntry[] = [
     assertIncludes(out, '丁', '23b. allに4位');
 }
 
-// 24. 石数の💎フォーマット
+// 24. 石数の💎フォーマット + —区切り
 {
     const out = formatRanking(testEntries, 'all', undefined, testDate);
-    assertIncludes(out, '💎3,500', '24a. 💎+カンマ区切り');
+    assertIncludes(out, '— 💎3,500', '24a. —区切り+💎+カンマ区切り');
     assertNotIncludes(out, '個', '24b. 「個」は表示しない');
 }
 
