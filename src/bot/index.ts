@@ -1,8 +1,9 @@
 // src/bot/index.ts
-import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } from 'discord.js';
+import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, SnowflakeUtil, TextChannel, Collection, Message } from 'discord.js';
 import { Princessify, PartyGuideError } from '../logic/princessify';
 import { parseMochiMessage, formatMochiResult } from '../logic/mochikoshi';
 import { parseRouteMessage, validateInput, findAllRoutes, formatRouteResult, RouteError } from '../logic/route';
+import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, getGameDayStart, GachaResult } from '../logic/landsol-cup';
 import { ChannelStore } from './channel-store';
 import { createServer } from 'http';
 import * as path from 'path';
@@ -125,7 +126,25 @@ client.once(Events.ClientReady, async c => {
             .addSubcommand(sub => sub.setName('add').setDescription('このチャンネルを監視対象に追加'))
             .addSubcommand(sub => sub.setName('remove').setDescription('このチャンネルを監視対象から削除'))
             .addSubcommand(sub => sub.setName('list').setDescription('このサーバーの監視チャンネル一覧'))
-            .setDefaultMemberPermissions(null)
+            .setDefaultMemberPermissions(null),
+        new SlashCommandBuilder()
+            .setName('landsol-cup')
+            .setDescription('ランドソル杯 — ランキング')
+            .addStringOption(opt =>
+                opt.setName('mode')
+                    .setDescription('表示モード')
+                    .setRequired(false)
+                    .addChoices(
+                        { name: '上位', value: 'top' },
+                        { name: '下位', value: 'bottom' },
+                        { name: '全員', value: 'all' }
+                    ))
+            .addIntegerOption(opt =>
+                opt.setName('count')
+                    .setDescription('表示件数（上位/下位モード用）')
+                    .setRequired(false)
+                    .setMinValue(1)
+                    .setMaxValue(50))
     ];
     try {
         await rest.put(Routes.applicationCommands(c.user.id), { body: commands.map(cmd => cmd.toJSON()) });
@@ -138,6 +157,13 @@ client.once(Events.ClientReady, async c => {
 // スラッシュコマンド処理
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
+
+    // /landsol-cup コマンド
+    if (interaction.commandName === 'landsol-cup') {
+        await handleLandsolCup(interaction);
+        return;
+    }
+
     if (interaction.commandName !== 'dango') return;
 
     const sub = interaction.options.getSubcommand();
@@ -252,6 +278,80 @@ client.on(Events.MessageCreate, async message => {
         }
     }
 });
+
+// /landsol-cup ハンドラ
+async function handleLandsolCup(interaction: import('discord.js').ChatInputCommandInteraction) {
+    const mode = (interaction.options.getString('mode') ?? 'all') as 'top' | 'bottom' | 'all';
+    const count = interaction.options.getInteger('count') ?? undefined;
+
+    const channel = interaction.channel;
+    if (!channel || !('messages' in channel)) {
+        await interaction.reply({ content: '⛔ このチャンネルではメッセージを取得できません。', flags: MessageFlags.Ephemeral });
+        return;
+    }
+
+    // 処理中を通知（3秒以上かかる可能性があるため deferReply）
+    await interaction.deferReply();
+
+    try {
+        const now = new Date();
+        const gameDayStart = getGameDayStart(now);
+        const afterSnowflake = SnowflakeUtil.generate({ timestamp: gameDayStart.getTime() }).toString();
+
+        // メッセージをページネーションで取得
+        const allMessages: Message[] = [];
+        let lastId: string | undefined;
+
+        while (true) {
+            const options: { limit: number; after: string } = { limit: 100, after: lastId ?? afterSnowflake };
+            const fetched: Collection<string, Message> = await (channel as TextChannel).messages.fetch(options);
+            if (fetched.size === 0) break;
+
+            // after は指定IDより新しいメッセージを返す。IDの昇順（古い→新しい）で並べる
+            const sorted = [...fetched.values()].sort((a, b) =>
+                Number(BigInt(a.id) - BigInt(b.id))
+            );
+            allMessages.push(...sorted);
+            lastId = sorted[sorted.length - 1].id;
+
+            if (fetched.size < 100) break;
+        }
+
+        // 各ユーザーの最新メッセージからガチャ結果を抽出
+        // Map<userId, GachaResult> で後勝ち（=最新が上書き）
+        // メッセージは古い順に並んでいるので、後のほうが新しい
+        const resultMap = new Map<string, GachaResult>();
+
+        for (const msg of allMessages) {
+            if (msg.author.bot) continue;
+
+            const rolls = parseGachaRolls(msg.content);
+            if (!rolls) continue;
+
+            const displayName = msg.member?.displayName ?? msg.author.displayName ?? msg.author.username;
+            resultMap.set(msg.author.id, {
+                userId: msg.author.id,
+                displayName,
+                rolls,
+                totalGems: computeTotalGems(rolls),
+            });
+        }
+
+        if (resultMap.size === 0) {
+            await interaction.editReply('ℹ️ 本日のランドソル杯の結果が見つかりませんでした。');
+            return;
+        }
+
+        const results = [...resultMap.values()];
+        const ranking = buildRanking(results);
+        const output = formatRanking(ranking, mode, count, now);
+
+        await interaction.editReply(output);
+    } catch (error) {
+        console.error('landsol-cup error:', error);
+        await interaction.editReply('❌ ランキングの集計中にエラーが発生しました。');
+    }
+}
 
 // ヘルスチェック用HTTPサーバー
 const PORT = process.env.PORT || 3000;
