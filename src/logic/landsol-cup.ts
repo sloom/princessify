@@ -117,9 +117,10 @@ export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 
     let display: RankingEntry[];
     if (mode === 'top' && count != null) {
         display = entries.slice(0, count);
-    } else if (mode === 'bottom' && count != null) {
-        // ワーストモード: 下位をスライスして逆順（最下位が先頭）
-        display = [...entries.slice(-count)].reverse();
+    } else if (mode === 'bottom') {
+        // ワーストモード: 逆順（最下位が先頭）、countがあればスライス
+        const sliced = count != null ? entries.slice(-count) : entries;
+        display = [...sliced].reverse();
     } else {
         display = entries;
     }

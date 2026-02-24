@@ -274,6 +274,19 @@ const testEntries: import('./landsol-cup').RankingEntry[] = [
     assertIncludes(out, '🫠 3位', '22.5b. 各行はN位のみ');
 }
 
+// 22.7. mode='bottom', countなし → 全件逆順（最下位が先頭）
+{
+    const out = formatRanking(testEntries, 'bottom', undefined, testDate);
+    // 丁(2800)が最下位 → 先頭に来る
+    const idx丁 = out.indexOf('丁');
+    const idx乙 = out.indexOf('乙');
+    assert(idx丁 < idx乙, '22.7a. countなしbottom: 丁（最下位）が乙より先');
+    // 💀が1位（最下位）に付く
+    assertIncludes(out, '💀 1位 丁', '22.7b. countなしbottom: 丁がワースト1位');
+    // ヘッダーにワーストランキング
+    assertIncludes(out, 'ワーストランキング', '22.7c. countなしbottom: ヘッダー');
+}
+
 // 23. mode='all' → 全件
 {
     const out = formatRanking(testEntries, 'all', undefined, testDate);
