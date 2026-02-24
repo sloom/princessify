@@ -339,6 +339,24 @@ console.log('\n=== フェーズ5: getGameDayStart ===');
     assertEqual(start.getHours(), 5, '28b. 時');
 }
 
+// 28.5. UTC入力: サーバーがUTCでもJST 5:00を正しく計算する
+{
+    // Feb 24 08:18 UTC = Feb 24 17:18 JST → ゲーム日はFeb 24 05:00 JST = Feb 23 20:00 UTC
+    const nowUtc = new Date(Date.UTC(2026, 1, 24, 8, 18));
+    const start = getGameDayStart(nowUtc);
+    assertEqual(start.getTime(), Date.UTC(2026, 1, 23, 20, 0, 0, 0), '28.5a. JST17:18 → Feb23 20:00 UTC');
+
+    // Feb 24 18:00 UTC = Feb 25 03:00 JST → ゲーム日はFeb 24 05:00 JST = Feb 23 20:00 UTC
+    const nowUtc2 = new Date(Date.UTC(2026, 1, 24, 18, 0));
+    const start2 = getGameDayStart(nowUtc2);
+    assertEqual(start2.getTime(), Date.UTC(2026, 1, 23, 20, 0, 0, 0), '28.5b. JST03:00 → 前日の20:00 UTC');
+
+    // Feb 23 20:00 UTC = Feb 24 05:00 JST → ゲーム日はFeb 24 05:00 JST = Feb 23 20:00 UTC
+    const nowUtc3 = new Date(Date.UTC(2026, 1, 23, 20, 0));
+    const start3 = getGameDayStart(nowUtc3);
+    assertEqual(start3.getTime(), Date.UTC(2026, 1, 23, 20, 0, 0, 0), '28.5c. JST05:00ちょうど → 当日の20:00 UTC');
+}
+
 // ============================================================
 // フェーズ6: detectDaysMismatch
 // ============================================================

@@ -159,12 +159,20 @@ export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 
 // --- ゲーム日境界 ---
 
 export function getGameDayStart(now: Date): Date {
-    const result = new Date(now);
-    result.setMinutes(0, 0, 0);
-    if (now.getHours() < 5) {
-        // 5時前 → 前日の05:00
-        result.setDate(result.getDate() - 1);
+    const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+    // JST での現在時刻を計算（UTC timestamp に +9h して UTC メソッドで読む）
+    const jstNow = new Date(now.getTime() + JST_OFFSET_MS);
+    const jstHour = jstNow.getUTCHours();
+    let year = jstNow.getUTCFullYear();
+    let month = jstNow.getUTCMonth();
+    let day = jstNow.getUTCDate();
+
+    if (jstHour < 5) {
+        // JST 5時前 → 前日の 05:00 JST
+        day -= 1;
     }
-    result.setHours(5);
-    return result;
+
+    // JST 05:00 を UTC に変換して返す
+    return new Date(Date.UTC(year, month, day, 5, 0, 0, 0) - JST_OFFSET_MS);
 }
