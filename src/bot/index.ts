@@ -300,6 +300,7 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
     const sinceStr = interaction.options.getString('since') ?? null;
 
     console.log(`🏆 landsol-cup: mode=${mode} count=${count} detail=${detail} date=${dateStr} since=${sinceStr}`);
+    console.log(`🏆 raw options: ${JSON.stringify(interaction.options.data)}`);
 
     const channel = interaction.channel;
     if (!channel || !('messages' in channel)) {
