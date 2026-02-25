@@ -153,6 +153,10 @@ client.once(Events.ClientReady, async c => {
                 opt.setName('date')
                     .setDescription('集計対象日（例: 2/24, 2026/2/24）')
                     .setRequired(false))
+            .addStringOption(opt =>
+                opt.setName('since')
+                    .setDescription('指定日以降を集計（例: 2/20）— 各ユーザーの最新結果を使用')
+                    .setRequired(false))
     ];
     try {
         await rest.put(Routes.applicationCommands(c.user.id), { body: commands.map(cmd => cmd.toJSON()) });
@@ -293,6 +297,7 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
     const count = interaction.options.getInteger('count') ?? undefined;
     const detail = interaction.options.getBoolean('detail') ?? false;
     const dateStr = interaction.options.getString('date') ?? null;
+    const sinceStr = interaction.options.getString('since') ?? null;
 
     const channel = interaction.channel;
     if (!channel || !('messages' in channel)) {
@@ -304,6 +309,12 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
     await interaction.deferReply();
 
     try {
+        // date と since の排他チェック
+        if (dateStr && sinceStr) {
+            await interaction.editReply('⛔ date と since は同時に指定できません。');
+            return;
+        }
+
         // 日付パース（指定なしの場合は今日のゲーム日）
         const parsedDate = parseGameDate(dateStr);
         if (dateStr && !parsedDate) {
@@ -311,9 +322,24 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
             return;
         }
 
+        const parsedSince = parseGameDate(sinceStr);
+        if (sinceStr && !parsedSince) {
+            await interaction.editReply('⛔ since の日付形式が不正です。例: 2/20 または 2026/2/20');
+            return;
+        }
+
         const now = new Date();
-        const gameDayStart = parsedDate ? getGameDayStart(parsedDate) : getGameDayStart(now);
-        const gameDayEnd = getGameDayEnd(gameDayStart);
+        const isSinceMode = !!parsedSince;
+        let gameDayStart: Date;
+        let gameDayEnd: Date;
+
+        if (isSinceMode) {
+            gameDayStart = getGameDayStart(parsedSince!);
+            gameDayEnd = getGameDayEnd(getGameDayStart(now));
+        } else {
+            gameDayStart = parsedDate ? getGameDayStart(parsedDate) : getGameDayStart(now);
+            gameDayEnd = getGameDayEnd(gameDayStart);
+        }
 
         const afterSnowflake = SnowflakeUtil.generate({ timestamp: gameDayStart.getTime() }).toString();
 
@@ -380,18 +406,19 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
                 displayName,
                 rolls,
                 totalGems: computeTotalGems(rolls),
+                gameDay: isSinceMode ? getGameDayStart(msg.createdAt) : undefined,
             });
         }
 
         if (resultMap.size === 0) {
-            const dateLabel = dateStr ?? '本日';
+            const dateLabel = sinceStr ? `${sinceStr}以降` : dateStr ?? '本日';
             await interaction.editReply(`ℹ️ ${dateLabel}のランドソル杯の結果が見つかりませんでした。`);
             return;
         }
 
         const results = [...resultMap.values()];
         const ranking = buildRanking(results);
-        const output = formatRanking(ranking, mode, count, gameDayStart, detail);
+        const output = formatRanking(ranking, mode, count, gameDayStart, detail, isSinceMode);
 
         await interaction.editReply(output);
     } catch (error) {

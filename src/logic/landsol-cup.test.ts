@@ -614,3 +614,178 @@ console.log('\n=== フェーズ11: formatRanking JSTヘッダー ===');
     const out = formatRanking(testEntries, 'all', undefined, testDate);
     assertIncludes(out, '2/24', '54a. 既存testDateでも2/24表示');
 }
+
+// ============================================================
+// フェーズ12: since モード
+// ============================================================
+console.log('\n=== フェーズ12: since モード ===');
+
+// --- buildRanking: gameDay 伝播 ---
+
+// 55. buildRanking が GachaResult の gameDay を RankingEntry にコピーする
+{
+    const gameDay = new Date(Date.UTC(2026, 1, 24, 20, 0)); // JST 2/25 05:00
+    const results: import('./landsol-cup').GachaResult[] = [
+        { userId: '1', displayName: '甲', rolls: [1, 1], totalGems: 1000, gameDay },
+    ];
+    const ranking = buildRanking(results);
+    assertEqual(ranking[0].gameDay?.getTime(), gameDay.getTime(), '55. buildRanking が gameDay を伝播');
+}
+
+// 56. buildRanking で gameDay が undefined の場合も正常動作（後方互換）
+{
+    const results: import('./landsol-cup').GachaResult[] = [
+        { userId: '1', displayName: '甲', rolls: [1, 1], totalGems: 1000 },
+    ];
+    const ranking = buildRanking(results);
+    assertEqual(ranking[0].gameDay, undefined, '56. gameDay undefined でも正常');
+}
+
+// --- formatRanking: since ヘッダー ---
+
+// 57. sinceMode=true → ヘッダーに日付範囲
+{
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const latestDay = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: new Array(6).fill(1), gameDay: latestDay },
+        { rank: 2, displayName: '乙', totalGems: 3000, rolls: new Array(6).fill(2), gameDay: latestDay },
+    ];
+    const out = formatRanking(entries, 'all', undefined, sinceDate, false, true);
+    assertIncludes(out, '2/20〜2/25', '57. since ヘッダーに日付範囲');
+}
+
+// 58. sinceMode + bottom → ワーストランキングヘッダー
+{
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const latestDay = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: new Array(6).fill(1), gameDay: latestDay },
+    ];
+    const out = formatRanking(entries, 'bottom', undefined, sinceDate, false, true);
+    assertIncludes(out, '2/20〜2/25', '58a. since+bottom ヘッダーに範囲');
+    assertIncludes(out, 'ワーストランキング', '58b. since+bottom ヘッダーにワースト');
+}
+
+// 59. sinceMode なし → 従来形式（〜なし）
+{
+    const out = formatRanking(testEntries, 'all', undefined, testDate);
+    assertIncludes(out, '2/24', '59a. 従来ヘッダー形式');
+    assertNotIncludes(out, '〜', '59b. 範囲記号なし');
+}
+
+// --- formatRanking: since インライン注釈 ---
+
+// 60. 最新ゲーム日と異なるユーザーに注釈
+{
+    const day24 = getGameDayStart(parseGameDate('2/24', 2026)!);
+    const day25 = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: new Array(7).fill(1), gameDay: day25 },
+        { rank: 2, displayName: '乙', totalGems: 2400, rolls: new Array(6).fill(2), gameDay: day24 },
+    ];
+    const out = formatRanking(entries, 'all', undefined, sinceDate, false, true);
+    // 甲（最新日）に注釈なし
+    const line甲 = out.split('\n').find(l => l.includes('甲'))!;
+    assertNotIncludes(line甲, '※', '60a. 甲（最新日）に注釈なし');
+    // 乙に注釈あり
+    assertIncludes(out, '※2/24', '60b. 乙に※2/24');
+    assertIncludes(out, '集計対象6回', '60c. 乙に集計対象6回');
+}
+
+// 61. 全員最新日 → 注釈なし
+{
+    const day25 = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: new Array(6).fill(1), gameDay: day25 },
+        { rank: 2, displayName: '乙', totalGems: 3000, rolls: new Array(6).fill(2), gameDay: day25 },
+    ];
+    const out = formatRanking(entries, 'all', undefined, sinceDate, false, true);
+    assertNotIncludes(out, '※', '61. 全員最新日 → 注釈なし');
+}
+
+// 62. gameDay undefined → 注釈なし（後方互換）
+{
+    const day25 = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: new Array(6).fill(1), gameDay: day25 },
+        { rank: 2, displayName: '乙', totalGems: 3000, rolls: new Array(6).fill(2) },
+    ];
+    const out = formatRanking(entries, 'all', undefined, sinceDate, false, true);
+    const line乙 = out.split('\n').find(l => l.includes('乙'))!;
+    assertNotIncludes(line乙, '※', '62. gameDay undefined → 注釈なし');
+}
+
+// 63. since + detail → 内訳と注釈が両方表示
+{
+    const day24 = getGameDayStart(parseGameDate('2/24', 2026)!);
+    const day25 = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: [1,1,1,1,1,1,1], gameDay: day25 },
+        { rank: 2, displayName: '乙', totalGems: 2400, rolls: [2,2,2,2,2,2], gameDay: day24 },
+    ];
+    const out = formatRanking(entries, 'all', undefined, sinceDate, true, true);
+    assertIncludes(out, '①', '63a. 内訳が表示');
+    assertIncludes(out, '※2/24', '63b. 注釈も表示');
+}
+
+// 64. since + bottom → ワーストでも注釈
+{
+    const day24 = getGameDayStart(parseGameDate('2/24', 2026)!);
+    const day25 = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: new Array(7).fill(1), gameDay: day25 },
+        { rank: 2, displayName: '乙', totalGems: 2400, rolls: new Array(6).fill(2), gameDay: day24 },
+    ];
+    const out = formatRanking(entries, 'bottom', 1, sinceDate, false, true);
+    assertIncludes(out, '※2/24', '64. bottom + since でも注釈');
+}
+
+// 65. 集計対象N回 = rolls.length
+{
+    const day24 = getGameDayStart(parseGameDate('2/24', 2026)!);
+    const day25 = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 4000, rolls: new Array(8).fill(1), gameDay: day25 },
+        { rank: 2, displayName: '乙', totalGems: 1500, rolls: new Array(5).fill(3), gameDay: day24 },
+    ];
+    const out = formatRanking(entries, 'all', undefined, sinceDate, false, true);
+    assertIncludes(out, '集計対象5回', '65. 集計対象5回 (rolls.length=5)');
+}
+
+// --- formatRanking: since フッター抑制 ---
+
+// 66. sinceMode=true → detectDaysMismatch フッターなし
+{
+    const day25 = getGameDayStart(parseGameDate('2/25', 2026)!);
+    const day24 = getGameDayStart(parseGameDate('2/24', 2026)!);
+    const sinceDate = getGameDayStart(parseGameDate('2/20', 2026)!);
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: new Array(7).fill(1), gameDay: day25 },
+        { rank: 2, displayName: '乙', totalGems: 2400, rolls: new Array(6).fill(2), gameDay: day24 },
+    ];
+    const out = formatRanking(entries, 'all', undefined, sinceDate, false, true);
+    assertNotIncludes(out, '⚠️', '66. sinceMode → フッター警告なし');
+}
+
+// 67. sinceMode=false → 従来通りフッター表示（後方互換）
+{
+    const entries: import('./landsol-cup').RankingEntry[] = [
+        { rank: 1, displayName: '甲', totalGems: 3500, rolls: new Array(10).fill(1) },
+        { rank: 2, displayName: '乙', totalGems: 2700, rolls: new Array(9).fill(3) },
+    ];
+    const out = formatRanking(entries, 'all', undefined, testDate);
+    assertIncludes(out, '⚠️', '67. sinceMode なし → 従来通りフッター表示');
+}
+
+// 68. parseGameDate で since 日付パース可能（既存機能確認）
+{
+    const d = parseGameDate('2/20', 2026);
+    assert(d !== null, '68. parseGameDate で since 日付パース可能');
+}

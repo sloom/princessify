@@ -8,6 +8,7 @@ export interface GachaResult {
     displayName: string;
     rolls: number[];
     totalGems: number;
+    gameDay?: Date;
 }
 
 export interface RankingEntry {
@@ -15,6 +16,7 @@ export interface RankingEntry {
     displayName: string;
     totalGems: number;
     rolls: number[];
+    gameDay?: Date;
 }
 
 // --- 定数 ---
@@ -69,6 +71,7 @@ export function buildRanking(results: GachaResult[]): RankingEntry[] {
             displayName: r.displayName,
             totalGems: r.totalGems,
             rolls: r.rolls,
+            gameDay: r.gameDay,
         });
     }
     return entries;
@@ -121,7 +124,7 @@ export function formatRollBreakdown(rolls: number[]): string {
 
 // --- フォーマット ---
 
-export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 'all', count?: number, date?: Date, detail?: boolean): string {
+export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 'all', count?: number, date?: Date, detail?: boolean, sinceMode?: boolean): string {
     const MEDALS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
     const WORST_MEDALS: Record<number, string> = { 1: '💀', 2: '🤡', 3: '🫠' };
 
@@ -141,7 +144,31 @@ export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 
     const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
     const d = date ?? new Date();
     const jstD = new Date(d.getTime() + JST_OFFSET_MS);
-    let header = `🏆 ランドソル杯（${jstD.getUTCMonth() + 1}/${jstD.getUTCDate()}）`;
+
+    // since モード: 最新ゲーム日を全エントリから計算
+    let latestGameDayMs: number | null = null;
+    if (sinceMode) {
+        for (const e of entries) {
+            if (e.gameDay && (!latestGameDayMs || e.gameDay.getTime() > latestGameDayMs)) {
+                latestGameDayMs = e.gameDay.getTime();
+            }
+        }
+    }
+
+    let header: string;
+    if (sinceMode) {
+        // since モード: 開始日〜最新ゲーム日
+        const startStr = `${jstD.getUTCMonth() + 1}/${jstD.getUTCDate()}`;
+        if (latestGameDayMs) {
+            const jstEnd = new Date(latestGameDayMs + JST_OFFSET_MS);
+            const endStr = `${jstEnd.getUTCMonth() + 1}/${jstEnd.getUTCDate()}`;
+            header = `🏆 ランドソル杯（${startStr}〜${endStr}）`;
+        } else {
+            header = `🏆 ランドソル杯（${startStr}〜）`;
+        }
+    } else {
+        header = `🏆 ランドソル杯（${jstD.getUTCMonth() + 1}/${jstD.getUTCDate()}）`;
+    }
     if (mode === 'bottom') {
         header += 'ワーストランキング';
     }
@@ -150,22 +177,31 @@ export function formatRanking(entries: RankingEntry[], mode: 'top' | 'bottom' | 
     const lines = display.map((e, i) => {
         const gems = e.totalGems.toLocaleString('en-US');
         const breakdown = detail ? ` (${formatRollBreakdown(e.rolls)})` : '';
+        // since 注釈: 最新ゲーム日と異なるエントリに付与
+        let sinceAnnotation = '';
+        if (sinceMode && e.gameDay && latestGameDayMs && e.gameDay.getTime() !== latestGameDayMs) {
+            const jstGD = new Date(e.gameDay.getTime() + JST_OFFSET_MS);
+            const gdStr = `${jstGD.getUTCMonth() + 1}/${jstGD.getUTCDate()}`;
+            sinceAnnotation = ` (※${gdStr} / 集計対象${e.rolls.length}回)`;
+        }
         if (mode === 'bottom') {
             const worstRank = i + 1;
             const medal = WORST_MEDALS[worstRank] ?? '\u3000';
-            return `${medal} ${worstRank}位 ${e.displayName} — 💎${gems}${breakdown}`;
+            return `${medal} ${worstRank}位 ${e.displayName} — 💎${gems}${breakdown}${sinceAnnotation}`;
         }
         const medal = MEDALS[e.rank] ?? '\u3000';
-        return `${medal} ${e.rank}位 ${e.displayName} — 💎${gems}${breakdown}`;
+        return `${medal} ${e.rank}位 ${e.displayName} — 💎${gems}${breakdown}${sinceAnnotation}`;
     });
 
     let result = `${header}\n\n${lines.join('\n')}`;
 
-    // 日数不一致の警告を追加
-    const { standardDays, mismatches } = detectDaysMismatch(entries);
-    if (mismatches.length > 0) {
-        const names = mismatches.map(m => `${m.name}(${m.days}日)`).join(' / ');
-        result += `\n\n集計対象: ${standardDays}日\n⚠️ 以下の方は集計対象日数が異なりました\n${names}`;
+    // 日数不一致の警告を追加（sinceMode では注釈で代替するため抑制）
+    if (!sinceMode) {
+        const { standardDays, mismatches } = detectDaysMismatch(entries);
+        if (mismatches.length > 0) {
+            const names = mismatches.map(m => `${m.name}(${m.days}日)`).join(' / ');
+            result += `\n\n集計対象: ${standardDays}日\n⚠️ 以下の方は集計対象日数が異なりました\n${names}`;
+        }
     }
 
     return result;
