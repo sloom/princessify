@@ -299,6 +299,8 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
     const dateStr = interaction.options.getString('date') ?? null;
     const sinceStr = interaction.options.getString('since') ?? null;
 
+    console.log(`🏆 landsol-cup: mode=${mode} count=${count} detail=${detail} date=${dateStr} since=${sinceStr}`);
+
     const channel = interaction.channel;
     if (!channel || !('messages' in channel)) {
         await interaction.reply({ content: '⛔ このチャンネルではメッセージを取得できません。', flags: MessageFlags.Ephemeral });
@@ -340,6 +342,8 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
             gameDayStart = parsedDate ? getGameDayStart(parsedDate) : getGameDayStart(now);
             gameDayEnd = getGameDayEnd(gameDayStart);
         }
+
+        console.log(`🏆 isSinceMode=${isSinceMode} gameDayStart=${gameDayStart.toISOString()} gameDayEnd=${gameDayEnd.toISOString()}`);
 
         const afterSnowflake = SnowflakeUtil.generate({ timestamp: gameDayStart.getTime() }).toString();
 
