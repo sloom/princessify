@@ -316,29 +316,36 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
         const gameDayEnd = getGameDayEnd(gameDayStart);
 
         const afterSnowflake = SnowflakeUtil.generate({ timestamp: gameDayStart.getTime() }).toString();
-        const beforeSnowflake = SnowflakeUtil.generate({ timestamp: gameDayEnd.getTime() }).toString();
 
         // メッセージをページネーションで取得
+        // 注意: Discord API は before/after の同時指定を許容しない（相互排他）ため、
+        // after のみで取得し、gameDayEnd を超えたメッセージはコード側でフィルタする
         const allMessages: Message[] = [];
         let lastId: string | undefined;
 
         while (true) {
-            const options: { limit: number; after: string; before: string } = {
+            const fetched: Collection<string, Message> = await (channel as TextChannel).messages.fetch({
                 limit: 100,
                 after: lastId ?? afterSnowflake,
-                before: beforeSnowflake,
-            };
-            const fetched: Collection<string, Message> = await (channel as TextChannel).messages.fetch(options);
+            });
             if (fetched.size === 0) break;
 
             // after は指定IDより新しいメッセージを返す。IDの昇順（古い→新しい）で並べる
             const sorted = [...fetched.values()].sort((a, b) =>
                 Number(BigInt(a.id) - BigInt(b.id))
             );
-            allMessages.push(...sorted);
-            lastId = sorted[sorted.length - 1].id;
 
-            if (fetched.size < 100) break;
+            let reachedEnd = false;
+            for (const msg of sorted) {
+                if (msg.createdTimestamp >= gameDayEnd.getTime()) {
+                    reachedEnd = true;
+                    break;
+                }
+                allMessages.push(msg);
+            }
+
+            if (reachedEnd || fetched.size < 100) break;
+            lastId = sorted[sorted.length - 1].id;
         }
 
         // 各ユーザーの最新メッセージからガチャ結果を抽出
