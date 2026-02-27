@@ -293,3 +293,10 @@ export function mergeOverrides(
         }
     }
 }
+
+/** Discord メンション文字列からユーザーIDリストを抽出 */
+export function parseExcludeUsers(input: string | null | undefined): string[] {
+    if (!input) return [];
+    const matches = input.matchAll(/<@!?(\d+)>/g);
+    return [...matches].map(m => m[1]);
+}

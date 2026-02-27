@@ -3,7 +3,7 @@ import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, P
 import { Princessify, PartyGuideError } from '../logic/princessify';
 import { parseMochiMessage, formatMochiResult } from '../logic/mochikoshi';
 import { parseRouteMessage, validateInput, findAllRoutes, formatRouteResult, RouteError } from '../logic/route';
-import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, getGameDayStart, getGameDayEnd, parseGameDate, mergeOverrides, GachaResult } from '../logic/landsol-cup';
+import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, getGameDayStart, getGameDayEnd, parseGameDate, mergeOverrides, parseExcludeUsers, GachaResult } from '../logic/landsol-cup';
 import { ChannelStore } from './channel-store';
 import { OverrideStore } from './override-store';
 import { createServer } from 'http';
@@ -162,6 +162,10 @@ client.once(Events.ClientReady, async c => {
             .addStringOption(opt =>
                 opt.setName('since')
                     .setDescription('指定日以降を集計（例: 2/20）— 各ユーザーの最新結果を使用')
+                    .setRequired(false))
+            .addStringOption(opt =>
+                opt.setName('exclude')
+                    .setDescription('除外ユーザー（メンション形式: @user1 @user2）')
                     .setRequired(false)),
         new SlashCommandBuilder()
             .setName('landsol-cup-entry')
@@ -454,6 +458,7 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
     const detail = interaction.options.getBoolean('detail') ?? false;
     const dateStr = interaction.options.getString('date') ?? null;
     const sinceStr = interaction.options.getString('since') ?? null;
+    const excludeIds = parseExcludeUsers(interaction.options.getString('exclude'));
 
     const channel = interaction.channel;
     if (!channel || !('messages' in channel)) {
@@ -579,6 +584,11 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
                 gameDay: isSinceMode ? new Date(ov.gameDayMs) : undefined,
             }));
             mergeOverrides(resultMap, ovResults, isSinceMode);
+        }
+
+        // 除外ユーザーを削除
+        for (const id of excludeIds) {
+            resultMap.delete(id);
         }
 
         if (resultMap.size === 0) {

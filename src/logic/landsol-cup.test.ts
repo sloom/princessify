@@ -1,7 +1,7 @@
 // src/logic/landsol-cup.test.ts
 // ランドソル杯（ランキング）テスト
 
-import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, formatRollBreakdown, getGameDayStart, getGameDayEnd, parseGameDate, detectDaysMismatch, mergeOverrides, GEMS_TABLE, GachaResult } from './landsol-cup';
+import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, formatRollBreakdown, getGameDayStart, getGameDayEnd, parseGameDate, detectDaysMismatch, mergeOverrides, parseExcludeUsers, GEMS_TABLE, GachaResult } from './landsol-cup';
 
 // --- テストユーティリティ ---
 
@@ -878,3 +878,47 @@ function makeGachaResult(overrides?: Partial<GachaResult>): GachaResult {
 }
 
 console.log('\n✅ Phase C 完了\n');
+
+// ============================================================
+// Phase D: parseExcludeUsers
+// ============================================================
+
+console.log('\n=== Phase D: parseExcludeUsers ===\n');
+
+// [D-01] 単一メンション
+{
+    const result = parseExcludeUsers('<@123>');
+    assertDeepEqual(result, ['123'], '[D-01] 単一メンション → ["123"]');
+}
+
+// [D-02] 複数メンション
+{
+    const result = parseExcludeUsers('<@123> <@456>');
+    assertDeepEqual(result, ['123', '456'], '[D-02] 複数メンション → ["123", "456"]');
+}
+
+// [D-03] ニックネーム形式 <@!id>
+{
+    const result = parseExcludeUsers('<@!789>');
+    assertDeepEqual(result, ['789'], '[D-03] ニックネーム形式 → ["789"]');
+}
+
+// [D-04] null/undefined → 空配列
+{
+    const result = parseExcludeUsers(null);
+    assertDeepEqual(result, [], '[D-04] null → 空配列');
+}
+
+// [D-05] 空文字列 → 空配列
+{
+    const result = parseExcludeUsers('');
+    assertDeepEqual(result, [], '[D-05] 空文字列 → 空配列');
+}
+
+// [D-06] メンションなしの文字列 → 空配列
+{
+    const result = parseExcludeUsers('テスト文字列');
+    assertDeepEqual(result, [], '[D-06] メンションなし → 空配列');
+}
+
+console.log('\n✅ Phase D 完了\n');
