@@ -3,8 +3,9 @@ import { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder, P
 import { Princessify, PartyGuideError } from '../logic/princessify';
 import { parseMochiMessage, formatMochiResult } from '../logic/mochikoshi';
 import { parseRouteMessage, validateInput, findAllRoutes, formatRouteResult, RouteError } from '../logic/route';
-import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, getGameDayStart, getGameDayEnd, parseGameDate, GachaResult } from '../logic/landsol-cup';
+import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, getGameDayStart, getGameDayEnd, parseGameDate, mergeOverrides, GachaResult } from '../logic/landsol-cup';
 import { ChannelStore } from './channel-store';
+import { OverrideStore } from './override-store';
 import { createServer } from 'http';
 import * as path from 'path';
 import dotenv from 'dotenv';
@@ -110,6 +111,11 @@ const store = new ChannelStore(
     (process.env.CHANNEL_ID ?? '').split(',').map(s => s.trim()).filter(Boolean)
 );
 
+// オーバーライドストア（ランドソル杯の代理入力）
+const overrideStore = new OverrideStore(
+    path.join(__dirname, '../../data/overrides.json')
+);
+
 // 起動時のイベント
 client.once(Events.ClientReady, async c => {
     console.log(`🤖 準備完了！ ${c.user.tag} としてログインしました。`);
@@ -156,7 +162,27 @@ client.once(Events.ClientReady, async c => {
             .addStringOption(opt =>
                 opt.setName('since')
                     .setDescription('指定日以降を集計（例: 2/20）— 各ユーザーの最新結果を使用')
-                    .setRequired(false))
+                    .setRequired(false)),
+        new SlashCommandBuilder()
+            .setName('landsol-cup-entry')
+            .setDescription('ランドソル杯 — 代理入力')
+            .addSubcommand(sub => sub
+                .setName('set')
+                .setDescription('ガチャ結果を代理入力する')
+                .addUserOption(opt => opt.setName('user').setDescription('対象ユーザー').setRequired(true))
+                .addStringOption(opt => opt.setName('result').setDescription('ガチャ結果（例: 1-2-3-1）').setRequired(true))
+                .addStringOption(opt => opt.setName('date').setDescription('日付（例: 2026/2/25）YYYY/M/D必須').setRequired(true)))
+            .addSubcommand(sub => sub
+                .setName('remove')
+                .setDescription('代理入力を削除する')
+                .addUserOption(opt => opt.setName('user').setDescription('対象ユーザー').setRequired(true))
+                .addStringOption(opt => opt.setName('date').setDescription('日付（例: 2026/2/25）YYYY/M/D必須').setRequired(true)))
+            .addSubcommand(sub => sub
+                .setName('clear')
+                .setDescription('このチャンネルの全代理入力を削除'))
+            .addSubcommand(sub => sub
+                .setName('list')
+                .setDescription('このチャンネルの代理入力一覧'))
     ];
     try {
         await rest.put(Routes.applicationCommands(c.user.id), { body: commands.map(cmd => cmd.toJSON()) });
@@ -173,6 +199,12 @@ client.on(Events.InteractionCreate, async interaction => {
     // /landsol-cup コマンド
     if (interaction.commandName === 'landsol-cup') {
         await handleLandsolCup(interaction);
+        return;
+    }
+
+    // /landsol-cup-entry コマンド
+    if (interaction.commandName === 'landsol-cup-entry') {
+        await handleLandsolCupEntry(interaction);
         return;
     }
 
@@ -291,6 +323,130 @@ client.on(Events.MessageCreate, async message => {
     }
 });
 
+// /landsol-cup-entry ハンドラ
+async function handleLandsolCupEntry(interaction: import('discord.js').ChatInputCommandInteraction) {
+    const sub = interaction.options.getSubcommand();
+    const channelId = interaction.channelId;
+
+    if (sub === 'set') {
+        const user = interaction.options.getUser('user', true);
+        const resultStr = interaction.options.getString('result', true);
+        const dateStr = interaction.options.getString('date', true);
+
+        // YYYY/M/D 必須チェック
+        if (!/^\d{4}\//.test(dateStr)) {
+            await interaction.reply({ content: '⛔ 日付は YYYY/M/D 形式で入力してください（例: 2026/2/25）', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const parsedDate = parseGameDate(dateStr);
+        if (!parsedDate) {
+            await interaction.reply({ content: '⛔ 日付の形式が不正です（例: 2026/2/25）', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const rolls = parseGachaRolls(resultStr);
+        if (!rolls) {
+            await interaction.reply({ content: '⛔ ガチャ結果の形式が不正です。1〜4の数字をハイフン区切りで入力してください（例: 1-2-3-1）', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        // displayName 解決
+        let displayName = user.displayName;
+        if (interaction.guild) {
+            try {
+                const member = await interaction.guild.members.fetch(user.id);
+                displayName = member.displayName;
+            } catch {
+                // メンバーが退出済み等
+            }
+        }
+
+        const totalGems = computeTotalGems(rolls);
+        const gameDayMs = getGameDayStart(parsedDate).getTime();
+
+        overrideStore.set(channelId, {
+            targetUserId: user.id,
+            targetDisplayName: displayName,
+            date: dateStr,
+            gameDayMs,
+            rolls,
+            totalGems,
+            registeredBy: interaction.user.id,
+            registeredAt: new Date().toISOString(),
+        });
+
+        const rollsStr = rolls.join('-');
+        await interaction.reply({
+            content: `✅ 登録: ${displayName} — ${dateStr}: ${rollsStr} (${totalGems}💎)`,
+            flags: MessageFlags.Ephemeral
+        });
+
+    } else if (sub === 'remove') {
+        const user = interaction.options.getUser('user', true);
+        const dateStr = interaction.options.getString('date', true);
+
+        if (!/^\d{4}\//.test(dateStr)) {
+            await interaction.reply({ content: '⛔ 日付は YYYY/M/D 形式で入力してください（例: 2026/2/25）', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const parsedDate = parseGameDate(dateStr);
+        if (!parsedDate) {
+            await interaction.reply({ content: '⛔ 日付の形式が不正です（例: 2026/2/25）', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
+        const removed = overrideStore.remove(channelId, user.id, dateStr);
+        if (removed) {
+            await interaction.reply({
+                content: `✅ 削除: ${user.displayName} — ${dateStr}`,
+                flags: MessageFlags.Ephemeral
+            });
+        } else {
+            await interaction.reply({
+                content: `ℹ️ 該当する代理入力が見つかりませんでした。`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+    } else if (sub === 'clear') {
+        const count = overrideStore.clear(channelId);
+        if (count > 0) {
+            await interaction.reply({
+                content: `✅ 全代理入力（${count}件）を削除しました。`,
+                flags: MessageFlags.Ephemeral
+            });
+        } else {
+            await interaction.reply({
+                content: 'ℹ️ このチャンネルに代理入力はありません。',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+    } else if (sub === 'list') {
+        const entries = overrideStore.list(channelId);
+        if (entries.length === 0) {
+            await interaction.reply({
+                content: 'ℹ️ このチャンネルに代理入力はありません。',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // 日付順ソート
+        const sorted = [...entries].sort((a, b) => a.gameDayMs - b.gameDayMs);
+        const lines = sorted.map(e => {
+            const rollsStr = e.rolls.join('-');
+            return `• ${e.targetDisplayName} — ${e.date}: ${rollsStr} (${e.totalGems}💎)`;
+        });
+        await interaction.reply({
+            content: `📋 **代理入力一覧:**\n${lines.join('\n')}`,
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
 // /landsol-cup ハンドラ
 async function handleLandsolCup(interaction: import('discord.js').ChatInputCommandInteraction) {
     const mode = (interaction.options.getString('mode') ?? 'all') as 'top' | 'bottom' | 'all';
@@ -408,6 +564,21 @@ async function handleLandsolCup(interaction: import('discord.js').ChatInputComma
                 totalGems: computeTotalGems(rolls),
                 gameDay: isSinceMode ? getGameDayStart(msg.createdAt) : undefined,
             });
+        }
+
+        // オーバーライド（代理入力）をマージ
+        const overrides = overrideStore.getForDateRange(
+            channel.id, gameDayStart.getTime(), gameDayEnd.getTime()
+        );
+        if (overrides.length > 0) {
+            const ovResults: GachaResult[] = overrides.map(ov => ({
+                userId: ov.targetUserId,
+                displayName: ov.targetDisplayName,
+                rolls: ov.rolls,
+                totalGems: ov.totalGems,
+                gameDay: isSinceMode ? new Date(ov.gameDayMs) : undefined,
+            }));
+            mergeOverrides(resultMap, ovResults, isSinceMode);
         }
 
         if (resultMap.size === 0) {

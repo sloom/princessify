@@ -271,3 +271,25 @@ export function getGameDayStart(now: Date): Date {
 export function getGameDayEnd(gameDayStart: Date): Date {
     return new Date(gameDayStart.getTime() + 24 * 60 * 60 * 1000);
 }
+
+/**
+ * オーバーライド結果を resultMap にマージする。
+ * - 単日モード: オーバーライドは常に優先
+ * - since モード: オーバーライドの gameDay が既存以降（>=）なら上書き
+ */
+export function mergeOverrides(
+    resultMap: Map<string, GachaResult>,
+    overrides: GachaResult[],
+    isSinceMode: boolean
+): void {
+    for (const ov of overrides) {
+        if (!isSinceMode) {
+            resultMap.set(ov.userId, ov);
+            continue;
+        }
+        const existing = resultMap.get(ov.userId);
+        if (!existing || !existing.gameDay || (ov.gameDay && ov.gameDay.getTime() >= existing.gameDay.getTime())) {
+            resultMap.set(ov.userId, ov);
+        }
+    }
+}

@@ -1,7 +1,7 @@
 // src/logic/landsol-cup.test.ts
 // ランドソル杯（ランキング）テスト
 
-import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, formatRollBreakdown, getGameDayStart, getGameDayEnd, parseGameDate, detectDaysMismatch, GEMS_TABLE } from './landsol-cup';
+import { parseGachaRolls, computeTotalGems, buildRanking, formatRanking, formatRollBreakdown, getGameDayStart, getGameDayEnd, parseGameDate, detectDaysMismatch, mergeOverrides, GEMS_TABLE, GachaResult } from './landsol-cup';
 
 // --- テストユーティリティ ---
 
@@ -789,3 +789,92 @@ console.log('\n=== フェーズ12: since モード ===');
     const d = parseGameDate('2/20', 2026);
     assert(d !== null, '68. parseGameDate で since 日付パース可能');
 }
+
+// ============================================================
+// Phase C: mergeOverrides
+// ============================================================
+
+console.log('\n=== Phase C: mergeOverrides ===\n');
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function makeGachaResult(overrides?: Partial<GachaResult>): GachaResult {
+    return {
+        userId: '111',
+        displayName: 'テスト甲',
+        rolls: [1, 2, 3, 1],
+        totalGems: 1450,
+        ...overrides,
+    };
+}
+
+// [C-01] 単日: 新規ユーザー追加
+{
+    const resultMap = new Map<string, GachaResult>();
+    resultMap.set('111', makeGachaResult());
+    const overrides = [makeGachaResult({ userId: '222', displayName: 'テスト乙', rolls: [4, 4, 4, 4], totalGems: 1000 })];
+    mergeOverrides(resultMap, overrides, false);
+    assertEqual(resultMap.size, 2, '[C-01] 単日: 新規ユーザー追加 → size=2');
+    assertEqual(resultMap.get('222')!.displayName, 'テスト乙', '[C-01] 追加ユーザーの名前');
+}
+
+// [C-02] 単日: 既存ユーザー上書き
+{
+    const resultMap = new Map<string, GachaResult>();
+    resultMap.set('111', makeGachaResult({ rolls: [1, 1, 1, 1], totalGems: 2000 }));
+    const overrides = [makeGachaResult({ rolls: [4, 4, 4, 4], totalGems: 1000 })];
+    mergeOverrides(resultMap, overrides, false);
+    assertEqual(resultMap.size, 1, '[C-02] 単日: 上書き → size=1');
+    assertEqual(resultMap.get('111')!.totalGems, 1000, '[C-02] 単日: 上書きされた totalGems');
+}
+
+// [C-03] since: オーバーライドが新しい → 上書き
+{
+    const baseDayMs = getGameDayStart(parseGameDate('2026/2/24')!).getTime();
+    const resultMap = new Map<string, GachaResult>();
+    resultMap.set('111', makeGachaResult({ gameDay: new Date(baseDayMs) }));
+    const overrides = [makeGachaResult({ gameDay: new Date(baseDayMs + DAY_MS), rolls: [4, 4], totalGems: 500 })];
+    mergeOverrides(resultMap, overrides, true);
+    assertEqual(resultMap.get('111')!.totalGems, 500, '[C-03] since: 新しいオーバーライドで上書き');
+}
+
+// [C-04] since: オーバーライドが古い → 上書きしない
+{
+    const baseDayMs = getGameDayStart(parseGameDate('2026/2/25')!).getTime();
+    const resultMap = new Map<string, GachaResult>();
+    resultMap.set('111', makeGachaResult({ gameDay: new Date(baseDayMs), totalGems: 2000 }));
+    const overrides = [makeGachaResult({ gameDay: new Date(baseDayMs - DAY_MS), rolls: [4, 4], totalGems: 500 })];
+    mergeOverrides(resultMap, overrides, true);
+    assertEqual(resultMap.get('111')!.totalGems, 2000, '[C-04] since: 古いオーバーライドは無視');
+}
+
+// [C-05] since: 同日 → 上書き
+{
+    const baseDayMs = getGameDayStart(parseGameDate('2026/2/25')!).getTime();
+    const resultMap = new Map<string, GachaResult>();
+    resultMap.set('111', makeGachaResult({ gameDay: new Date(baseDayMs), totalGems: 2000 }));
+    const overrides = [makeGachaResult({ gameDay: new Date(baseDayMs), rolls: [4, 4], totalGems: 500 })];
+    mergeOverrides(resultMap, overrides, true);
+    assertEqual(resultMap.get('111')!.totalGems, 500, '[C-05] since: 同日はオーバーライド優先');
+}
+
+// [C-06] since: 既存に gameDay なし → 上書き
+{
+    const baseDayMs = getGameDayStart(parseGameDate('2026/2/25')!).getTime();
+    const resultMap = new Map<string, GachaResult>();
+    resultMap.set('111', makeGachaResult({ totalGems: 2000 }));  // gameDay undefined
+    const overrides = [makeGachaResult({ gameDay: new Date(baseDayMs), rolls: [4, 4], totalGems: 500 })];
+    mergeOverrides(resultMap, overrides, true);
+    assertEqual(resultMap.get('111')!.totalGems, 500, '[C-06] since: gameDay なしならオーバーライド優先');
+}
+
+// [C-07] 空オーバーライド → 変化なし
+{
+    const resultMap = new Map<string, GachaResult>();
+    resultMap.set('111', makeGachaResult({ totalGems: 2000 }));
+    mergeOverrides(resultMap, [], false);
+    assertEqual(resultMap.size, 1, '[C-07] 空オーバーライド → size不変');
+    assertEqual(resultMap.get('111')!.totalGems, 2000, '[C-07] 空オーバーライド → 値不変');
+}
+
+console.log('\n✅ Phase C 完了\n');
