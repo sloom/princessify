@@ -65,9 +65,12 @@ export function classifyUBType(
     fullLineText: string
 ): UBType {
     if (/^\d{1,2}:\d{2}[\s　]+敵UB/.test(fullLineText.trim())) return 'enemy';
-    const firstToken = textAfterCharName.trim().split(/[\s　]+/)[0] || '';
+    const text = textAfterCharName.trim();
+    if (!text) return 'set';  // 注釈なし = SET UB
+    const firstToken = text.split(/[\s　]+/)[0];
     if (firstToken.startsWith('#')) return 'set';
-    if (firstToken.toUpperCase() === 'AUTO' || firstToken === 'オート') return 'auto';
+    const firstTokenUnbracketed = firstToken.replace(/[()（）]/g, '');
+    if (firstTokenUnbracketed.toUpperCase() === 'AUTO' || firstTokenUnbracketed === 'オート') return 'auto';
     if (/^[uU][bB]中$/.test(firstToken)) return 'none';
     return 'manual';
 }
@@ -743,6 +746,9 @@ export class Princessify {
             // UBタイプ分類
             const ubType = classifyUBType(textAfterChar, trimmed);
 
+            // #プレフィックスSET判定（常に自動クリア対象）
+            const isHashSet = textAfterChar.trim().startsWith('#');
+
             // 明示的SET検出
             const explicitSets = parseExplicitSets(trimmed, this.party);
 
@@ -759,6 +765,7 @@ export class Princessify {
                 isSubLine,
                 explicitSets,
                 inlineInstructions,
+                isHashSet,
             });
         }
 
@@ -824,6 +831,15 @@ export class Princessify {
             return demands.get(idx)!;
         };
 
+        // 明示的な解除コマンド（{name}解除）が存在するキャラを収集
+        // これらのキャラは「解除まで⭕維持（解釈A）」、それ以外は「発動でSET OFF（解釈B）」
+        const hasExplicitRelease = new Set<number>();
+        for (const entry of entries) {
+            for (const charIdx of entry.inlineInstructions.setOff) {
+                hasExplicitRelease.add(charIdx);
+            }
+        }
+
         // パス1: SET/AUTO需要の構築
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i];
@@ -832,8 +848,16 @@ export class Princessify {
             if (entry.ubType === 'set' && entry.actorIndex !== -1) {
                 if (i > 0) {
                     getDemands(i - 1).setOn.push(entry.actorIndex);
+                } else {
+                    // 最初のエントリがSET → 初期状態でSET ON
+                    initialState[entry.actorIndex] = true;
                 }
-                getDemands(i).setOff.push(entry.actorIndex);
+                // #プレフィックスSET → 常に自動クリア
+                // 注釈なしSET + 明示解除なし → 自動クリア（解釈B）
+                // 注釈なしSET + 明示解除あり → SET維持（解釈A: setOffは解除コマンドが担う）
+                if (entry.isHashSet || !hasExplicitRelease.has(entry.actorIndex)) {
+                    getDemands(i).setOff.push(entry.actorIndex);
+                }
             }
 
             // AUTO発動UB → 直前にAUTO ON、発動行でAUTO OFF
@@ -984,4 +1008,5 @@ interface InferEntry {
     isSubLine: boolean;
     explicitSets: number[];
     inlineInstructions: InlineInstructions;
+    isHashSet: boolean;  // #プレフィックスSETか（常に自動クリア）
 }

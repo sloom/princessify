@@ -1345,8 +1345,8 @@ console.log('\n=== 初期状態行テスト ===');
     // 初期状態行が出力に残っている（1:30の前に配置）
     assertIncludes(result, '水モネ、マホ、カスミ、リノセット', '初期状態行: 出力に残る');
 
-    // 1:20 マホ: manual UB, 初期状態維持
-    assertIncludes(result, '🌟1:20 マホ [〇〇〇〇ー]⬛', '初期状態行: 1:20 マホの状態維持');
+    // 1:20 マホ: 注釈なし=SET、発動でSET OFF（🌟なし）
+    assertIncludes(result, '1:20 マホ [❌〇〇〇ー]⬛', '初期状態行: 1:20 マホSET発動でOFF');
 }
 
 // 10. 初期状態行なし → 従来通り全OFF
@@ -1358,11 +1358,11 @@ console.log('\n=== 初期状態行テスト ===');
     ].join('\n');
     const result = tool.convert(input, { channelMode: true })!;
 
-    // 初期行: 全OFF, autoなし
-    assertIncludes(result, '1:30 開始 [❌❌❌❌❌]', '初期状態行なし: 全OFF');
+    // 初期行: マホ=SET ON（注釈なし=SETのため）
+    assertIncludes(result, '1:30 開始 [⭕❌❌❌❌]', '初期状態行なし: マホがSET ON');
 
-    // 1:20 マホ: manual UB, 全OFF維持
-    assertIncludes(result, '🌟1:20 マホ [ーーーーー]', '初期状態行なし: 1:20 マホ全OFF');
+    // 1:20 マホ: 注釈なし=SET、発動でSET OFF（🌟なし）
+    assertIncludes(result, '1:20 マホ [❌ーーーー]', '初期状態行なし: マホ発動でSET OFF');
 }
 
 // === Phase 3: 推論モード統合テスト ===
@@ -1387,16 +1387,16 @@ console.log('\n=== 推論モード統合テスト ===');
     // 初期状態: 甲乙丙丁=ON, 戊=OFF
     assertIncludes(result, '1:30 開始 [⭕⭕⭕⭕❌]', '統合11: 初期状態4人ON');
 
-    // 1:20 甲: manual, 状態変化なし → [〇〇〇〇ー]
-    assertIncludes(result, '🌟1:20 甲 [〇〇〇〇ー]', '統合11: 1:20 甲 状態維持');
+    // 1:20 甲: 注釈なし=SET、甲には解除コマンドあり→解釈A（発動後も⭕維持、🌟なし）
+    assertIncludes(result, '1:20 甲 [〇〇〇〇ー]', '統合11: 1:20 甲発動後も⭕維持（解釈A）');
 
-    // 1:15 乙　甲解除: 乙のmanual UB + 甲をSET OFF → 甲=OFF
-    // この行でinline命令「甲解除」が適用される
+    // 1:15 乙　甲解除: 乙のmanual UB（🌟あり）+ 甲解除で甲がOFF
     const line1_15 = getLine(result, '1:15');
-    assertIncludes(line1_15, '[❌〇〇〇ー]', '統合11: 1:15で甲解除 → 甲❌');
+    assertIncludes(line1_15, '🌟', '統合11: 1:15 乙に🌟あり');
+    assertIncludes(line1_15, '[❌〇〇〇ー]', '統合11: 1:15 甲解除で甲がOFF（乙丙丁はON維持）');
 
-    // 1:10 丙: 甲=OFF維持 → [ー〇〇〇ー]
-    assertIncludes(result, '🌟1:10 丙 [ー〇〇〇ー]', '統合11: 1:10 甲OFF維持');
+    // 1:10 丙: 注釈なし=SET、解除コマンドなし→解釈B（発動でSET OFF、🌟なし）→ [ー〇❌〇ー]
+    assertIncludes(result, '1:10 丙 [ー〇❌〇ー]', '統合11: 1:10 丙SET発動でOFF（解釈B）');
 }
 
 // 12. インラインオートオン/オフがauto出力に反映
@@ -1434,21 +1434,20 @@ console.log('\n=== 推論モード統合テスト ===');
     // 初期: マホ=ON, カスミ=ON, リノ=ON, 水モネ=ON, クルル=OFF, auto=OFF
     assertIncludes(result, '1:30 開始 [⭕⭕⭕⭕❌]👉⬛', 'E2E: 初期状態');
 
-    // 1:10 カスミ: manual, 状態維持 [〇〇〇〇ー]⬛
-    assertIncludes(result, '🌟1:10 カスミ [〇〇〇〇ー]⬛', 'E2E: 1:10 カスミ');
+    // 1:10 カスミ: 注釈なし=SET、発動でSET OFF（🌟なし）→ [〇❌〇〇ー]
+    assertIncludes(result, '1:10 カスミ [〇❌〇〇ー]⬛', 'E2E: 1:10 カスミSET発動でOFF');
 
-    // 1:05 リノ　クルルセット: manual + クルルON → [〇〇〇〇⭕]⬛
+    // 1:05 リノ　クルルセット: manual(🌟) + クルルON → カスミは❌済み → [〇ー〇〇⭕]⬛
     const line1_05 = getLine(result, '1:05');
-    assertIncludes(line1_05, '[〇〇〇〇⭕]⬛', 'E2E: 1:05 クルルセット');
+    assertIncludes(line1_05, '[〇ー〇〇⭕]⬛', 'E2E: 1:05 クルルセット');
 
-    // 1:00 クルル #通常cl: SET UB → 直前(1:05)でON、ここでOFF
-    // でも1:05で既にクルルON（インラインセット） → ここでクルルOFF
+    // 1:00 クルル #通常cl: SET UB → ここでクルルOFF → [〇ー〇〇❌]⬛
     const line1_00 = getLine(result, '1:00');
-    assertIncludes(line1_00, '[〇〇〇〇❌]⬛', 'E2E: 1:00 クルル通常cl SET OFF');
+    assertIncludes(line1_00, '[〇ー〇〇❌]⬛', 'E2E: 1:00 クルル通常cl SET OFF');
 
-    // 0:55 水モネ　クルル、リノ解除: manual + クルルOFF(already) + リノOFF
+    // 0:55 水モネ　クルル、リノ解除: manual + リノOFF → [〇ー❌〇ー]⬛
     const line0_55 = getLine(result, '0:55');
-    assertIncludes(line0_55, '[〇〇❌〇ー]⬛', 'E2E: 0:55 リノ解除');
+    assertIncludes(line0_55, '[〇ー❌〇ー]⬛', 'E2E: 0:55 リノ解除');
 }
 
 // === 明示的オートON/OFF指示がある場合、auto UBがオート状態を変更しないテスト ===
@@ -1546,7 +1545,7 @@ console.log('\n=== channelMode: パーティ行前の無関係行スキップテ
     assert(result !== null, '複数無関係行+空行: エラーにならず結果が返る');
     if (result) {
         assertIncludes(result, '1:30 開始', '複数無関係行+空行: 初期行が生成される');
-        assertIncludes(result, '🌟1:20 マホ', '複数無関係行+空行: 推論モード動作');
+        assertIncludes(result, '1:20 マホ', '複数無関係行+空行: 推論モード動作');
     }
 }
 
@@ -2471,6 +2470,104 @@ console.log('\n=== 51. 「切」に🌟なし ===');
     const lines = result.split('\n');
     const line130 = lines.find(l => l.includes('1:30'));
     assertNotIncludes(line130 ?? '', '🌟', '51a: 「切」に🌟なし');
+}
+
+// =============================================
+// 推論モード: Phase X - 注釈なし=SET / (Auto)括弧対応
+// =============================================
+
+console.log('\n=== 推論モード: 注釈なし=SET、(Auto)対応 ===\n');
+
+// テストX1: 注釈なし → 'set'
+assertEqual(classifyUBType('', '1:19 クリア'), 'set', '注釈なし（空文字）→ set');
+assertEqual(classifyUBType('   ', '1:19 クリア'), 'set', 'スペースのみ → set');
+
+// テストX2: (Auto)括弧付き → 'auto'
+assertEqual(classifyUBType('(Auto)', '1:14 ワカナ(Auto)'), 'auto', '(Auto) → auto');
+assertEqual(classifyUBType('(オート)', '1:14 ワカナ(オート)'), 'auto', '(オート) → auto');
+
+// テストX3: 注釈なしUBの推論統合テスト
+// 甲（最初・注釈なし=SET）→ 初期行で⭕
+// 乙（手動注釈あり）→ 🌟あり、乙の行で丙が⭕
+// 丙（3番目・注釈なし=SET）→ 🌟なし、発動行で❌
+{
+    const tool = new Princessify();
+    const input = `
+@dango 甲 乙 丙 丁 戊
+
+1:20 甲
+1:10 乙 手動注釈
+1:00 丙
+`;
+    const result = tool.convert(input);
+    console.log('--- 推論結果（注釈なし=SET統合）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // 初期行で甲がSET ON（最初エントリが注釈なし=SET）
+    assertIncludes(result, '1:30 開始 [⭕', '注釈なし最初エントリ → 初期行で甲SET ON');
+    // 甲の発動行に🌟なし
+    assertNotIncludes(result, '🌟1:20', '注釈なしSET行に🌟は付かない');
+    // 甲発動でSET OFF
+    assertIncludes(result, '[❌ーーーー]', '甲発動行でSET OFF');
+    // 乙（手動注釈）→ 🌟あり
+    assertIncludes(result, '🌟1:10 乙 手動注釈', '手動注釈行に🌟あり');
+    // 乙の行で丙がSET ON（丙が次に打つため）
+    assertIncludes(result, '[ーー⭕ーー]', '乙の行で丙がSET ON');
+    // 丙（注釈なし=SET）→ 🌟なし、SET OFF
+    assertNotIncludes(result, '🌟1:00', '注釈なし丙行に🌟なし');
+    assertIncludes(result, '[ーー❌ーー]', '丙発動行でSET OFF');
+}
+
+// テストX4: (Auto)括弧付き推論統合テスト
+{
+    const tool = new Princessify();
+    const input = `
+@dango 甲 乙 丙 丁 戊
+
+1:20 甲
+1:10 乙 (Auto)
+1:00 丙
+`;
+    const result = tool.convert(input);
+    console.log('--- 推論結果（(Auto)括弧）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // (Auto)行に🌟なし
+    assertNotIncludes(result, '🌟1:10 乙', '(Auto)行に🌟なし');
+    // auto推論：直前にAUTO ON
+    assertIncludes(result, '👉✅', '(Auto)直前にAUTO ON');
+    // auto推論：発動行でAUTO OFF
+    assertIncludes(result, '👉⬛', '(Auto)発動行にAUTO OFF');
+}
+
+// テストX5: 解釈A（解除コマンドあり）vs 解釈B（解除コマンドなし）の区別
+// 甲: 1:15に「甲解除」あり → 1:20発動後も⭕維持（解釈A）
+// 丙: 解除コマンドなし → 1:10発動後に❌（解釈B）
+{
+    const tool = new Princessify();
+    const input = `
+@dango 甲 乙 丙 丁 戊
+甲セット
+1:20 甲
+1:15 乙　甲解除
+1:10 丙
+`;
+    const result = tool.convert(input);
+    console.log('--- 推論結果（解釈A vs 解釈B）---');
+    console.log(result);
+    console.log('--- テスト ---');
+
+    // 解釈A: 甲には解除コマンドあり → 発動後も⭕維持（[〇...]）
+    assertIncludes(result, '1:20 甲 [〇ーーーー]', '解釈A: 甲発動後も⭕維持');
+    assertNotIncludes(result, '🌟1:20', '解釈A: 甲に🌟なし（SETなので）');
+    // 甲解除のある乙行で甲が❌になる
+    assertIncludes(result, '🌟1:15 乙', '解釈A: 乙はmanualで🌟あり');
+    assertIncludes(result, '[❌ー⭕ーー]', '解釈A: 甲解除行で甲が❌、丙が⭕');
+    // 解釈B: 丙には解除コマンドなし → 発動後に❌
+    assertIncludes(result, '1:10 丙 [ーー❌ーー]', '解釈B: 丙発動後に❌');
+    assertNotIncludes(result, '🌟1:10', '解釈B: 丙に🌟なし（SETなので）');
 }
 
 console.log('\n=== テスト完了 ===\n');
